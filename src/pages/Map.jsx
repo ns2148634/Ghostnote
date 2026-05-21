@@ -232,7 +232,7 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
       )}
 
       {/* ── Locate button (bottom right) ── */}
-      <div className="absolute bottom-8 right-4 z-10">
+      <div className="absolute bottom-8 right-4 z-[1100]">
         <button
           onClick={handleLocate}
           disabled={!pos}
