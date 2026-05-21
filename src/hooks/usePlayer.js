@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 export function usePlayer() {
   const [player, setPlayer] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [isNew, setIsNew]     = useState(false)
 
   useEffect(() => {
     let sub
@@ -18,7 +19,7 @@ export function usePlayer() {
       if (error || !data) {
         const res = await supabase
           .from('players')
-          .insert({ id: userId, display_name: '無名靈探', stamina: 10 })
+          .insert({ id: userId, display_name: '', stamina: 10 })
           .select()
           .single()
         data = res.data
@@ -30,6 +31,9 @@ export function usePlayer() {
             { player_id: userId, name: '筆記本二', capacity: 15 },
           ])
         }
+        setIsNew(true)
+      } else if (!data.display_name) {
+        setIsNew(true)
       }
 
       setPlayer(data)
@@ -60,5 +64,5 @@ export function usePlayer() {
     setPlayer(data)
   }
 
-  return { player, loading, setPlayer, updateName }
+  return { player, loading, isNew, setIsNew, setPlayer, updateName }
 }

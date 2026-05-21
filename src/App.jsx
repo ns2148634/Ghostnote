@@ -6,6 +6,7 @@ import { useNotebooks } from './hooks/useNotebooks'
 import TopBar from './components/layout/TopBar'
 import BottomNav from './components/layout/BottomNav'
 import Auth from './pages/Auth'
+import SetupName from './pages/SetupName'
 
 const MapPage       = lazy(() => import('./pages/Map'))
 const NotebookPage  = lazy(() => import('./pages/NotebookPage'))
@@ -17,8 +18,8 @@ function PageLoader() {
 }
 
 function AppShell() {
-  const { player, loading, setPlayer } = usePlayer()
-  const { stamina, consume, max }      = useStamina(player, setPlayer)
+  const { player, loading, isNew, setIsNew, setPlayer, updateName } = usePlayer()
+  const { stamina, consume, max } = useStamina(player, setPlayer)
   const {
     notebooks, sealed,
     addFragment, moveFragment, deleteFragment, updateTag, seal,
@@ -40,6 +41,16 @@ function AppShell() {
     )
   }
 
+  // First-time setup: prompt for display name
+  if (isNew) {
+    return (
+      <SetupName onDone={async (name) => {
+        await updateName(name)
+        setIsNew(false)
+      }} />
+    )
+  }
+
   return (
     <>
       <TopBar
@@ -50,34 +61,34 @@ function AppShell() {
       />
       <div className="flex-1 overflow-hidden flex flex-col">
         <Suspense fallback={<PageLoader />}>
-        <Routes>
-          <Route path="/" element={<Navigate to="/map" replace />} />
-          <Route path="/map" element={
-            <MapPage
-              player={player}
-              notebooks={notebooks}
-              stamina={stamina}
-              consume={consume}
-              addFragment={addFragment}
-            />
-          } />
-          <Route path="/notebook" element={
-            <NotebookPage
-              notebooks={notebooks}
-              onTagChange={updateTag}
-              onDelete={deleteFragment}
-              onMove={moveFragment}
-              onSeal={seal}
-            />
-          } />
-          <Route path="/bookshelf" element={
-            <BookshelfPage sealed={sealed} />
-          } />
-          <Route path="/shop" element={
-            <ShopPage player={player} setPlayer={setPlayer} />
-          } />
-          <Route path="*" element={<Navigate to="/map" replace />} />
-        </Routes>
+          <Routes>
+            <Route path="/" element={<Navigate to="/map" replace />} />
+            <Route path="/map" element={
+              <MapPage
+                player={player}
+                notebooks={notebooks}
+                stamina={stamina}
+                consume={consume}
+                addFragment={addFragment}
+              />
+            } />
+            <Route path="/notebook" element={
+              <NotebookPage
+                notebooks={notebooks}
+                onTagChange={updateTag}
+                onDelete={deleteFragment}
+                onMove={moveFragment}
+                onSeal={seal}
+              />
+            } />
+            <Route path="/bookshelf" element={
+              <BookshelfPage sealed={sealed} />
+            } />
+            <Route path="/shop" element={
+              <ShopPage player={player} setPlayer={setPlayer} />
+            } />
+            <Route path="*" element={<Navigate to="/map" replace />} />
+          </Routes>
         </Suspense>
       </div>
       <BottomNav />
