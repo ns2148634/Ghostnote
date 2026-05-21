@@ -84,8 +84,14 @@ function AppShell() {
             <Route path="/bookshelf" element={
               <BookshelfPage sealed={sealed} />
             } />
-            <Route path="/shop" element={
-              <ShopPage player={player} setPlayer={setPlayer} />
+            <Route path="/guild" element={
+              <ShopPage
+                player={player}
+                setPlayer={setPlayer}
+                stamina={stamina}
+                maxStamina={max}
+                sealedCount={sealed.length}
+              />
             } />
             <Route path="*" element={<Navigate to="/map" replace />} />
           </Routes>

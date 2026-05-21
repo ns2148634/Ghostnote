@@ -4,7 +4,7 @@ const tabs = [
   { to: '/map',       icon: '◎', label: '地圖' },
   { to: '/notebook',  icon: '▣', label: '筆記本' },
   { to: '/bookshelf', icon: '≡', label: '書架' },
-  { to: '/shop',      icon: '◈', label: '商城' },
+  { to: '/guild',     icon: '◈', label: '協會' },
 ]
 
 export default function BottomNav() {

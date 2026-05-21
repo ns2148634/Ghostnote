@@ -53,7 +53,7 @@ src/
 │   ├── layout/        TopBar、BottomNav
 │   └── ui/            Modal、StaminaBar
 ├── hooks/
-│   ├── usePlayer.js   玩家資料（fetch/create on login）
+│   ├── usePlayer.js   玩家資料（fetch/create on login，含 isNew 旗標）
 │   ├── useStamina.js  體力計算（時間差，無後端排程）
 │   └── useNotebooks.js 筆記本 + 碎片 CRUD + 封存邏輯
 ├── lib/
@@ -61,10 +61,11 @@ src/
 │   └── weather.js     Open-Meteo + 時辰/節日判斷
 └── pages/
     ├── Auth.jsx        登入（Google OAuth + Email OTP 兩步驟）
+    ├── SetupName.jsx   首次登入設定調查員名稱（一次性）
     ├── Map.jsx         地圖探查主頁
     ├── NotebookPage.jsx 筆記本管理
     ├── BookshelfPage.jsx 封存書架（純書架，無鬼怪筆記本頁）
-    └── ShopPage.jsx    商城（示範）
+    └── ShopPage.jsx    協會（玩家資訊、補給站、帳號管理）
 ```
 
 ## UI 設計原則
@@ -103,12 +104,30 @@ current = min(10, stored + floor((now - updated_at) / 8分鐘))
 1. Leaflet 地圖（CartoDB Dark）
 2. radial-gradient 暗角 vignette
 3. 頂部狀態欄（時辰 + 異常數量 + GPS 座標）
-4. 底部圓形「尋找」按鈕（掃描時有三層擴散光環動畫）
+4. 掃描中：全畫面置中三層擴散光環動畫
+5. 右下角「⊕」定位按鈕（重新置中地圖至玩家位置）
 
 ### Auth 流程
 
 - **Google**：`signInWithOAuth({ provider: 'google' })` → 跳轉回 `window.location.origin`
 - **Email OTP**：`signInWithOtp({ email })` → 寄送 6 位驗證碼 → `verifyOtp({ email, token, type:'email' })`
+
+### 首次登入名稱設定（SetupName.jsx）
+
+`usePlayer` 建立新玩家時 `display_name` 預設為空字串 `''`，並設 `isNew = true`。
+`App.jsx` 在 player 存在但 `isNew` 為 true 時，攔截路由顯示 `SetupName` 頁面。
+玩家輸入名稱 → `updateName()` 寫入 DB → `setIsNew(false)` → 進入遊戲。
+
+> Supabase `players.display_name` 欄位需允許空字串（預設值改為 `''`）：
+> ```sql
+> ALTER TABLE players ALTER COLUMN display_name SET DEFAULT '';
+> ```
+
+### 地圖定位點互動
+
+玩家自身定位 Marker 可點擊即觸發掃描（消耗 1 格體力），這是唯一的掃描入口（已移除底部圓形掃描按鈕）。
+定位點為 28px 圓形觸控區，中心 10px 金點，掃描中外圈光暈加強。
+右下角 `⊕` 按鈕可重新將地圖置中至玩家目前位置（不消耗體力）。
 
 ### 新增故事內容
 
@@ -127,3 +146,5 @@ current = min(10, stored + floor((now - updated_at) / 8分鐘))
 - 付費金流
 - 玩家投稿流程
 - 鬼怪筆記本 UI（`creature_pages` 已在 DB 解鎖，但書架頁已拿掉該 tab，待另行設計入口）
+- 協會等級系統（目前稱號依封存本數判斷，無 XP 計算）
+- 完整帳號刪除（目前刪除 players 記錄 + signOut，auth.users 記錄留存在 Supabase）

@@ -69,6 +69,12 @@ function AutoCenter({ pos, ready }) {
   return null
 }
 
+function MapController({ mapRef }) {
+  const map = useMap()
+  useEffect(() => { mapRef.current = map }, [map])
+  return null
+}
+
 // Horror status messages
 const IDLE_MSGS    = ['環境靜默', '無異常訊號', '周圍平靜', '等待偵測']
 const ANOMALY_MSGS = (n) => [`感知到 ${n} 處異常`, `偵測到 ${n} 個訊號`, `異常點：${n}`]
@@ -83,6 +89,11 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
   const [overlay, setOverlay]     = useState(null)
   const [noStamina, setNoStamina] = useState(false)
   const [pendingFrag, setPending] = useState(null)
+  const mapRef = useRef(null)
+
+  function handleLocate() {
+    if (pos && mapRef.current) mapRef.current.setView([pos.lat, pos.lng], 16, { animate: true })
+  }
 
   useEffect(() => {
     const t = getTimeCondition()
@@ -178,6 +189,7 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
                    attribution='&copy; <a href="https://carto.com">CARTO</a>' />
         <GeoLocator onPosition={setPos} />
         <AutoCenter pos={pos} ready={mapReady} />
+        <MapController mapRef={mapRef} />
         {pos && (
           <Marker
             position={[pos.lat, pos.lng]}
@@ -210,38 +222,28 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
         )}
       </div>
 
-      {/* ── 尋找 button ── */}
-      <div className="absolute bottom-8 inset-x-0 flex flex-col items-center gap-2 pointer-events-none z-10">
-        <div className="relative flex items-center justify-center">
-          {/* Rings shown while scanning */}
-          {scanning && <>
-            <span className="scan-ring absolute w-16 h-16 rounded-full" />
-            <span className="scan-ring scan-ring-2 absolute w-16 h-16 rounded-full" />
-            <span className="scan-ring scan-ring-3 absolute w-16 h-16 rounded-full" />
-          </>}
-          {/* Idle glow when anomalies present */}
-          {!scanning && anomalies.length > 0 && (
-            <span className="absolute w-20 h-20 rounded-full"
-              style={{ background: 'radial-gradient(circle, rgba(201,185,154,0.08) 0%, transparent 70%)' }} />
-          )}
-          <button
-            onClick={handleScan}
-            disabled={scanning || stamina < 1}
-            className="pointer-events-auto relative w-16 h-16 rounded-full
-                       border border-dim bg-bg/90 backdrop-blur
-                       flex items-center justify-center
-                       hover:border-muted active:scale-95
-                       transition-all duration-200
-                       disabled:opacity-25 disabled:cursor-not-allowed"
-          >
-            <span className={`font-mono text-xl leading-none transition-colors ${scanning ? 'text-muted' : 'text-accent'}`}>
-              ◉
-            </span>
-          </button>
+      {/* ── Scan rings (visual feedback when scanning) ── */}
+      {scanning && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+          <span className="scan-ring absolute w-16 h-16 rounded-full" />
+          <span className="scan-ring scan-ring-2 absolute w-16 h-16 rounded-full" />
+          <span className="scan-ring scan-ring-3 absolute w-16 h-16 rounded-full" />
         </div>
-        <span className={`font-mono text-xs tracking-[0.3em] transition-colors ${stamina < 1 ? 'text-dim' : 'text-muted'}`}>
-          {stamina < 1 ? '體力不足' : '尋找'}
-        </span>
+      )}
+
+      {/* ── Locate button (bottom right) ── */}
+      <div className="absolute bottom-8 right-4 z-10">
+        <button
+          onClick={handleLocate}
+          disabled={!pos}
+          className="w-10 h-10 rounded-full border border-dim bg-bg/90 backdrop-blur
+                     flex items-center justify-center
+                     hover:border-muted active:scale-95
+                     transition-all duration-200
+                     disabled:opacity-25 disabled:cursor-not-allowed"
+        >
+          <span className="font-mono text-accent text-sm leading-none">⊕</span>
+        </button>
       </div>
 
       {/* ── Exploration overlay ── */}
