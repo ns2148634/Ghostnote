@@ -1,0 +1,127 @@
+import { useState } from 'react'
+
+const LAYER_W = { basic: 'w-7', detail: 'w-10', lore: 'w-14' }
+const LAYER_LABEL = { basic: '基礎版', detail: '細節版', lore: '鬼怪志版' }
+
+function getLayer(nb) {
+  if (nb.story?.difficulty === 'advanced')     return 'lore'
+  if (nb.story?.difficulty === 'intermediate') return 'detail'
+  return 'basic'
+}
+
+function SealedBook({ notebook, onClick }) {
+  const layer = getLayer(notebook)
+  const title = notebook.story?.title || notebook.name
+  return (
+    <button
+      onClick={onClick}
+      className={`${LAYER_W[layer]} h-32 relative group
+                  border border-dim/50 bg-surface
+                  hover:border-accent/60 hover:bg-card
+                  transition-all duration-300 active:scale-95`}
+    >
+      {/* spine gradient */}
+      <div className="absolute inset-0 opacity-20"
+           style={{ background: 'linear-gradient(to right, rgba(201,185,154,0.15) 0%, transparent 40%)' }} />
+      {/* title */}
+      <div className="absolute inset-x-0 inset-y-2 flex items-center justify-center overflow-hidden">
+        <span
+          className="font-mono text-dim text-[10px] leading-snug group-hover:text-muted transition-colors"
+          style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', maxHeight: '100%' }}
+        >
+          {title}
+        </span>
+      </div>
+      {/* bottom badge */}
+      <div className="absolute bottom-0 inset-x-0 border-t border-dim/30 py-0.5 text-center">
+        <span className="font-mono text-dim/50 text-[8px]">{LAYER_LABEL[layer][0]}</span>
+      </div>
+    </button>
+  )
+}
+
+function SealedModal({ notebook, onClose }) {
+  if (!notebook) return null
+  const layer = getLayer(notebook)
+  return (
+    <div className="fixed inset-0 bg-black/85 z-50 flex items-end justify-center"
+         onClick={onClose}>
+      <div className="bg-card border-t border-border w-full max-w-[480px] max-h-[75vh] overflow-y-auto"
+           onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-border flex items-start justify-between sticky top-0 bg-card z-10">
+          <div>
+            <p className="font-mono text-dim text-xs tracking-widest">{LAYER_LABEL[layer]}</p>
+            <p className="font-mono text-ink text-base mt-0.5">{notebook.story?.title || notebook.name}</p>
+          </div>
+          <button onClick={onClose} className="font-mono text-dim text-lg hover:text-muted transition-colors leading-none mt-1">✕</button>
+        </div>
+        {/* Fragments */}
+        <div className="px-5 py-4 flex flex-col gap-3">
+          {(!notebook.fragments || notebook.fragments.length === 0) && (
+            <p className="font-mono text-dim text-sm text-center py-4">（無碎片記錄）</p>
+          )}
+          {(notebook.fragments || []).map(f => (
+            <div key={f.id} className="border border-border/60 p-4 bg-[#111] relative">
+              {f.player_tag && (
+                <span className="absolute top-2.5 right-2.5 font-mono text-[10px] text-accent/60 bg-dim/20 px-1.5 py-0.5">
+                  {f.player_tag}
+                </span>
+              )}
+              <p className="font-mono text-muted text-sm leading-7 pr-12">{f.sf?.text || '（文字遺失）'}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function BookshelfPage({ sealed }) {
+  const [viewing, setViewing] = useState(null)
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Title */}
+      <div className="px-5 pt-6 pb-3 shrink-0">
+        <p className="font-mono text-dim text-xs tracking-[0.25em]">— 封存書架 —</p>
+        {sealed.length > 0 && (
+          <p className="font-mono text-dim/50 text-[11px] mt-1">{sealed.length} 本封存</p>
+        )}
+      </div>
+
+      {/* Shelf */}
+      <div className="flex-1 overflow-y-auto px-5 pb-6">
+        {sealed.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3">
+            <p className="font-mono text-dim text-sm">書架空蕩蕩的。</p>
+            <p className="font-mono text-dim/50 text-xs">封存第一本筆記本後，書會在這裡出現。</p>
+          </div>
+        ) : (
+          /* Shelf rows — bottom border acts as shelf plank */
+          <div className="flex flex-col gap-0">
+            {chunkArray(sealed, 8).map((row, ri) => (
+              <div key={ri}>
+                <div className="flex items-end gap-1 pt-6">
+                  {row.map(nb => (
+                    <SealedBook key={nb.id} notebook={nb} onClick={() => setViewing(nb)} />
+                  ))}
+                </div>
+                {/* Shelf plank */}
+                <div className="h-px bg-dim/30 mt-0 shadow-sm" />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <SealedModal notebook={viewing} onClose={() => setViewing(null)} />
+    </div>
+  )
+}
+
+function chunkArray(arr, size) {
+  const result = []
+  for (let i = 0; i < arr.length; i += size) result.push(arr.slice(i, i + size))
+  return result
+}

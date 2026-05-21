@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Reset ─────────────────────────────────── */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  height: 100%;
+  background: #111;          /* desktop gutter */
+}
+
+body {
+  height: 100%;
+  background: #111;
+  color: #e8e0d5;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 15px;           /* base — bigger than default 12px used before */
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+#root {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Mobile-first: constrain width, center on desktop */
+  max-width: 480px;
+  margin: 0 auto;
+  background: #1a1a1a;
+  position: relative;
+}
+
+/* ── Grain ─────────────────────────────────── */
+#root::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  max-width: 480px;
+  margin: 0 auto;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  z-index: 9999;
+}
+
+/* ── Scrollbar ──────────────────────────────── */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: #1a1a1a; }
+::-webkit-scrollbar-thumb { background: #333; }
+
+/* ── Leaflet ────────────────────────────────── */
+.leaflet-container { background: #0d0d0d !important; }
+.leaflet-control-zoom { display: none !important; }
+.leaflet-control-attribution {
+  background: transparent !important;
+  font-size: 8px !important;
+  color: #2a2a2a !important;
+}
+.leaflet-control-attribution a { color: #333 !important; }
+
+/* ── Animations ─────────────────────────────── */
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+.cursor { animation: blink 1s step-end infinite; }
+
+@keyframes anomalyPulse { 0%,100%{transform:scale(1);opacity:.6} 50%{transform:scale(1.6);opacity:1} }
+.anomaly-dot { animation: anomalyPulse 2.8s ease-in-out infinite; }
+
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+.fade-in { animation: fadeIn 0.7s ease-in; }
+
+/* Scan button rings */
+@keyframes scanRing {
+  0%   { transform: scale(1);   opacity: 0.7; }
+  100% { transform: scale(2.8); opacity: 0; }
+}
+.scan-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(201,185,154,0.5);
+  animation: scanRing 1.8s ease-out infinite;
+  pointer-events: none;
+}
+.scan-ring-2 { animation-delay: 0.6s; }
+.scan-ring-3 { animation-delay: 1.2s; }
+
+/* ── Map vignette ───────────────────────────── */
+.map-vignette {
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(10,8,6,0.75) 100%);
+}
