@@ -55,8 +55,10 @@ export default function ExplorationOverlay({
     setBusy(false)
     if (!ok) return
     if (layers.length === 0) {
-      // No choice layers — direct success (shouldn't happen normally)
-      setPhase('success')
+      // Fragment has no exploration layers — fail gracefully
+      setBodyText('氣息已散去，什麼都沒有留下。')
+      setDone(true)
+      setPhase('fail')
       return
     }
     setBodyText(layers[0].sceneText)
@@ -84,7 +86,7 @@ export default function ExplorationOverlay({
 
   return (
     <div className="fixed inset-0 bg-[#0d0d0d] z-40 flex flex-col fade-in">
-      <div className="flex-1 flex flex-col justify-center px-8 py-12 overflow-y-auto">
+      <div className="flex-1 flex flex-col justify-center px-8 py-12 overflow-y-auto w-full max-w-[600px] mx-auto">
 
         {/* Atmosphere */}
         {phase === 'atmosphere' && (
@@ -173,7 +175,7 @@ export default function ExplorationOverlay({
 
       {/* Layer progress dots */}
       {phase === 'layer' && layers.length > 1 && (
-        <div className="flex justify-center gap-2 pb-6">
+        <div className="flex justify-center gap-2 pb-6 w-full max-w-[600px] mx-auto">
           {layers.map((_, i) => (
             <span key={i}
               className={`inline-block w-1 h-1 rounded-full transition-colors ${i <= layerIdx ? 'bg-accent' : 'bg-dim'}`}

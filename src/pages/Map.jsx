@@ -121,8 +121,12 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
     const centre = pos || { lat: 25.0478, lng: 121.5319 }
     try { await getWeatherCondition(centre.lat, centre.lng) } catch {}
 
-    const { data: eligible } = await supabase.from('story_fragments').select('id')
-    const ids = (eligible || []).map(f => f.id)
+    // Only fragments that have at least one choice layer (layer_index > 0)
+    const { data: eligibleNodes } = await supabase
+      .from('exploration_nodes')
+      .select('story_fragment_id')
+      .gt('layer_index', 0)
+    const ids = [...new Set((eligibleNodes || []).map(n => n.story_fragment_id))]
     const count = 3 + Math.floor(Math.random() * 3)
 
     const spots = Array.from({ length: count }, () => ({
@@ -160,6 +164,8 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
     if (stamina < 1) { setNoStamina(true); return false }
     const ok = await consume(1)
     if (!ok) { setNoStamina(true); return false }
+    // Remove anomaly immediately — can't re-investigate after deepening
+    setAnomalies(prev => prev.filter(a => a.id !== overlay?.anomalyId))
     return true
   }
 
@@ -171,7 +177,6 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
   async function handleNotebookSelect(notebookId) {
     if (!pendingFrag) return
     await addFragment(notebookId, pendingFrag.frag.id)
-    setAnomalies(prev => prev.filter(a => a.id !== pendingFrag.anomalyId))
     setPending(null)
   }
 
