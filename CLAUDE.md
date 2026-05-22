@@ -70,9 +70,9 @@ src/
 
 ## UI 設計原則
 
-- **手機優先**：`#root` 限制 `max-width: 480px` 居中，桌面左右填深色背景
+- **手機優先**：`#root` `max-width: 600px` 居中，`width: 100%` 確保手機全寬；桌面/平板兩側填 `#000` 純黑
 - **基礎字體**：`body font-size: 15px`；標籤用 `text-xs`(12px)，內文用 `text-sm`(14px)
-- **Safe area**：BottomNav 有 `padding-bottom: env(safe-area-inset-bottom)` 適配 iPhone Home Bar
+- **Safe area**：`#root` 有 `padding-top: env(safe-area-inset-top)` 適配瀏海/動態島；BottomNav 有 `padding-bottom: env(safe-area-inset-bottom)` 適配 Home Bar
 - **動畫原則**：極少、極慢；禁止彈跳；只用 fadeIn / pulse / typewriter
 
 ## 核心機制說明
@@ -95,17 +95,19 @@ current = min(10, stored + floor((now - updated_at) / 8分鐘))
 ### 探查流程（Map.jsx + ExplorationOverlay.jsx）
 
 ```
-尋找按鈕（-1體力）→ 異常點生成 → 點擊（免費氛圍描述）
+點擊玩家定位點（-1體力）→ 異常點生成 → 點擊異常點（免費氛圍描述）
 → 深入探查（-1體力）→ 多層選擇題（打字機效果）→ 成功/失敗
-→ 成功：選筆記本放入碎片
+→ 成功：NotebookSelectModal 選擇目標筆記本 → 放入碎片 → 異常點消失
 ```
+
+`pendingFrag` 狀態結構為 `{ frag, anomalyId }`，保留 anomalyId 以便選完筆記本後正確清除異常點。
 
 地圖頁 UI 層次（由下至上）：
 1. Leaflet 地圖（CartoDB Dark）
 2. radial-gradient 暗角 vignette
 3. 頂部狀態欄（時辰 + 異常數量 + GPS 座標）
 4. 掃描中：全畫面置中三層擴散光環動畫
-5. 右下角「⊕」定位按鈕（重新置中地圖至玩家位置）
+5. 右下角「⊕」定位按鈕（z-1100，高於 Leaflet 控制層 z-1000）
 
 ### Auth 流程
 
@@ -148,3 +150,4 @@ current = min(10, stored + floor((now - updated_at) / 8分鐘))
 - 鬼怪筆記本 UI（`creature_pages` 已在 DB 解鎖，但書架頁已拿掉該 tab，待另行設計入口）
 - 協會等級系統（目前稱號依封存本數判斷，無 XP 計算）
 - 完整帳號刪除（目前刪除 players 記錄 + signOut，auth.users 記錄留存在 Supabase）
+- 筆記本改名後 NotebookView 的 nameVal state 透過 useEffect 同步，若多人/多頁同時操作可能有短暫延遲
