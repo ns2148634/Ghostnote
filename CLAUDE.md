@@ -96,11 +96,15 @@ current = min(10, stored + floor((now - updated_at) / 8分鐘))
 
 ```
 點擊玩家定位點（-1體力）→ 異常點生成 → 點擊異常點（免費氛圍描述）
-→ 深入探查（-1體力）→ 多層選擇題（打字機效果）→ 成功/失敗
-→ 成功：NotebookSelectModal 選擇目標筆記本 → 放入碎片 → 異常點消失
+→ 深入探查（-1體力）→ 異常點立即消失 → 多層選擇題（最少 2 層）→ 成功/失敗
+→ 成功：NotebookSelectModal 選擇目標筆記本 → 放入碎片
 ```
 
-`pendingFrag` 狀態結構為 `{ frag, anomalyId }`，保留 anomalyId 以便選完筆記本後正確清除異常點。
+**關鍵設計決策：**
+- 異常點在玩家點「深入探查」時立即從地圖移除（`handleDeepen` 內 setAnomalies filter），不可重複進入
+- 掃描候選清單只含有 `exploration_nodes.layer_index > 0` 的碎片，確保每個候選碎片都有選擇層
+- `ExplorationOverlay` 的 `layers.length === 0` fallback 為失敗（「氣息已散去」），不給碎片
+- Overlay 用 `fixed inset-0`（全螢幕暗色）+ 內容 `max-w-[600px] mx-auto`，桌面版文字正確置中
 
 地圖頁 UI 層次（由下至上）：
 1. Leaflet 地圖（CartoDB Dark）
@@ -134,10 +138,13 @@ current = min(10, stored + floor((now - updated_at) / 8分鐘))
 ### 新增故事內容
 
 在 `story_fragments` 和 `exploration_nodes` 表格插入資料即可。
-每片碎片需要：
+每片碎片**必須**有：
 - `layer_index=0` 的節點（免費氛圍描述，`options` 為 null）
-- `layer_index=1+` 的節點（普通碎片 2 層 / 困難碎片 3 層）
+- `layer_index=1` **和** `layer_index=2` 的節點（普通碎片至少 2 層選擇）
+- 困難碎片可加 `layer_index=3`
 - 每層 3 個選項，各有 `is_correct` 和 `fail_text`
+
+> ⚠️ 沒有 `layer_index > 0` 節點的碎片**不會出現在掃描候選清單**中（handleScan 過濾）。
 
 ## 尚未實作
 
