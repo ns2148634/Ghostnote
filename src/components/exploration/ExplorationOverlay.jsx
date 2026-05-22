@@ -85,7 +85,7 @@ export default function ExplorationOverlay({
   }
 
   return (
-    <div className="fixed inset-0 bg-[#0d0d0d] z-40 flex flex-col fade-in">
+    <div className="fixed inset-0 bg-[#0d0d0d] z-[2000] flex flex-col fade-in">
       <div className="flex-1 flex flex-col justify-center px-8 py-12 overflow-y-auto w-full max-w-[600px] mx-auto">
 
         {/* Atmosphere */}

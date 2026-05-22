@@ -53,16 +53,6 @@ body {
 ::-webkit-scrollbar-track { background: #1a1a1a; }
 ::-webkit-scrollbar-thumb { background: #333; }
 
-/* ── Leaflet ────────────────────────────────── */
-.leaflet-container { background: #0d0d0d !important; }
-.leaflet-control-zoom { display: none !important; }
-.leaflet-control-attribution {
-  background: transparent !important;
-  font-size: 8px !important;
-  color: #2a2a2a !important;
-}
-.leaflet-control-attribution a { color: #333 !important; }
-
 /* ── Animations ─────────────────────────────── */
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 .cursor { animation: blink 1s step-end infinite; }

@@ -10,7 +10,7 @@ GDD 原始文件：`c:\Users\ewnut\Downloads\paranormal-notebook-gdd (1).md`
 
 - **前端**：React 18 + Vite + vite-plugin-pwa（PWA）
 - **樣式**：Tailwind CSS（深色靈異主題）
-- **地圖**：react-leaflet + CartoDB Dark tiles + 瀏覽器 Geolocation API
+- **定位**：瀏覽器 Geolocation API（`navigator.geolocation.watchPosition`，不再使用 Leaflet）
 - **後端**：Supabase（PostgreSQL + Auth + RLS + Realtime）
 - **天氣**：Open-Meteo（免費，無需 key）
 - **部署**：Vercel + GitHub Actions CI/CD
@@ -101,17 +101,21 @@ current = min(10, stored + floor((now - updated_at) / 8分鐘))
 ```
 
 **關鍵設計決策：**
-- 異常點在玩家點「深入探查」時立即從地圖移除（`handleDeepen` 內 setAnomalies filter），不可重複進入
+- 異常點在玩家點「深入探查」時立即移除（`handleDeepen` 內 setAnomalies filter），不可重複進入
 - 掃描候選清單只含有 `exploration_nodes.layer_index > 0` 的碎片，確保每個候選碎片都有選擇層
 - `ExplorationOverlay` 的 `layers.length === 0` fallback 為失敗（「氣息已散去」），不給碎片
-- Overlay 用 `fixed inset-0`（全螢幕暗色）+ 內容 `max-w-[600px] mx-auto`，桌面版文字正確置中
+- Overlay 用 `fixed inset-0 z-[2000]`（全螢幕暗色）+ 內容 `max-w-[600px] mx-auto`，桌面版文字正確置中；z-2000 確保在手機上不被任何元素壓住
 
 地圖頁 UI 層次（由下至上）：
-1. Leaflet 地圖（CartoDB Dark）
+1. 恐怖 Scanner 背景（`#080604` + CRT scanlines + 5 層雷達環 + 十字準線）
 2. radial-gradient 暗角 vignette
-3. 頂部狀態欄（時辰 + 異常數量 + GPS 座標）
-4. 掃描中：全畫面置中三層擴散光環動畫
-5. 右下角「⊕」定位按鈕（z-1100，高於 Leaflet 控制層 z-1000）
+3. 異常點（`anomaly-dot` CSS 脈動，`toScreen()` 依 GPS 偏移轉換為 % 座標）
+4. 玩家點（畫面正中心，點擊 = 掃描，44px 觸控區）
+5. 頂部狀態欄（時辰 + 偵測訊息 + GPS 座標）
+6. 掃描中：三層擴散光環動畫
+
+**已移除 react-leaflet**：改用 `navigator.geolocation.watchPosition`，Map chunk 從 165 kB → 11 kB。
+`toScreen(playerPos, anomaly)` 用 GPS 偏移（約 1 km = ±28%）計算螢幕 % 座標。
 
 ### Auth 流程
 
