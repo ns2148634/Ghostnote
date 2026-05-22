@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Modal from '../components/ui/Modal'
 
 function FragmentCard({ frag, onTagChange, onDelete, onMoveClick, sealed }) {
@@ -53,11 +53,15 @@ function FragmentCard({ frag, onTagChange, onDelete, onMoveClick, sealed }) {
   )
 }
 
-function NotebookView({ notebook, allNotebooks, onBack, onTagChange, onDelete, onMove, onSeal }) {
-  const [moving, setMoving]   = useState(null) // fragment being moved
-  const [sealing, setSealing] = useState(false)
+function NotebookView({ notebook, allNotebooks, onBack, onTagChange, onDelete, onMove, onSeal, onRename }) {
+  const [moving, setMoving]       = useState(null)
+  const [sealing, setSealing]     = useState(false)
   const [sealResult, setSealResult] = useState(null)
   const [confirmDel, setConfirmDel] = useState(null)
+  const [editingName, setEditingName] = useState(false)
+  const [nameVal, setNameVal]     = useState(notebook.name)
+
+  useEffect(() => { setNameVal(notebook.name) }, [notebook.name])
 
   async function doSeal() {
     setSealing(true)
@@ -77,8 +81,36 @@ function NotebookView({ notebook, allNotebooks, onBack, onTagChange, onDelete, o
         <button onClick={onBack} className="font-mono text-dim text-xs hover:text-muted transition-colors">
           ← 返回
         </button>
-        <span className="font-mono text-ink text-xs">{notebook.name}</span>
-        <span className="font-mono text-dim text-[10px]">
+
+        {editingName ? (
+          <div className="flex items-center gap-2 flex-1 mx-3">
+            <input
+              value={nameVal}
+              onChange={e => setNameVal(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { onRename(notebook.id, nameVal.trim() || notebook.name); setEditingName(false) }
+                if (e.key === 'Escape') { setNameVal(notebook.name); setEditingName(false) }
+              }}
+              maxLength={20}
+              autoFocus
+              className="flex-1 bg-transparent border-b border-muted font-mono text-ink text-xs
+                         outline-none text-center tracking-wide"
+            />
+            <button
+              onClick={() => { onRename(notebook.id, nameVal.trim() || notebook.name); setEditingName(false) }}
+              className="font-mono text-accent text-[10px] shrink-0"
+            >確定</button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setEditingName(true)}
+            className="font-mono text-ink text-xs hover:text-accent transition-colors flex-1 text-center mx-3"
+          >
+            {notebook.name}
+          </button>
+        )}
+
+        <span className="font-mono text-dim text-[10px] shrink-0">
           {notebook.fragments?.length ?? 0} / {notebook.capacity}
         </span>
       </div>
@@ -142,7 +174,7 @@ function NotebookView({ notebook, allNotebooks, onBack, onTagChange, onDelete, o
   )
 }
 
-export default function NotebookPage({ notebooks, onTagChange, onDelete, onMove, onSeal }) {
+export default function NotebookPage({ notebooks, onTagChange, onDelete, onMove, onSeal, onRename }) {
   const [selected, setSelected] = useState(null)
   const nb = notebooks.find(n => n.id === selected)
 
@@ -156,6 +188,7 @@ export default function NotebookPage({ notebooks, onTagChange, onDelete, onMove,
         onDelete={onDelete}
         onMove={onMove}
         onSeal={onSeal}
+        onRename={onRename}
       />
     )
   }

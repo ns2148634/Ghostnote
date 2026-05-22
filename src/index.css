@@ -7,12 +7,12 @@
 
 html {
   height: 100%;
-  background: #111;          /* desktop gutter */
+  background: #000;          /* desktop gutter — pure black */
 }
 
 body {
   height: 100%;
-  background: #111;
+  background: #000;
   color: #e8e0d5;
   font-family: 'Courier New', Courier, monospace;
   font-size: 15px;           /* base — bigger than default 12px used before */
@@ -25,11 +25,14 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* Mobile-first: constrain width, center on desktop */
-  max-width: 480px;
+  /* Mobile: full width; Desktop/tablet: max 600px centered */
+  width: 100%;
+  max-width: 600px;
   margin: 0 auto;
   background: #1a1a1a;
   position: relative;
+  /* iOS safe area */
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 /* ── Grain ─────────────────────────────────── */
@@ -37,7 +40,7 @@ body {
   content: '';
   position: fixed;
   inset: 0;
-  max-width: 480px;
+  max-width: 600px;
   margin: 0 auto;
   pointer-events: none;
   opacity: 0.03;

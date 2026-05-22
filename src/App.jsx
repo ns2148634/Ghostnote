@@ -22,7 +22,7 @@ function AppShell() {
   const { stamina, consume, max } = useStamina(player, setPlayer)
   const {
     notebooks, sealed,
-    addFragment, moveFragment, deleteFragment, updateTag, seal,
+    addFragment, moveFragment, deleteFragment, updateTag, renameNotebook, seal,
   } = useNotebooks(player?.id)
 
   if (loading) {
@@ -79,6 +79,7 @@ function AppShell() {
                 onDelete={deleteFragment}
                 onMove={moveFragment}
                 onSeal={seal}
+                onRename={renameNotebook}
               />
             } />
             <Route path="/bookshelf" element={

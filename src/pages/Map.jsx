@@ -163,13 +163,16 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
     return true
   }
 
-  function handleSuccess(frag) { setOverlay(null); setPending(frag) }
+  function handleSuccess(frag) {
+    setPending({ frag, anomalyId: overlay.anomalyId })
+    setOverlay(null)
+  }
 
   async function handleNotebookSelect(notebookId) {
     if (!pendingFrag) return
-    await addFragment(notebookId, pendingFrag.id)
-    setAnomalies(prev => prev.filter(a => a.id !== overlay?.anomalyId))
-    setPending(null); setOverlay(null)
+    await addFragment(notebookId, pendingFrag.frag.id)
+    setAnomalies(prev => prev.filter(a => a.id !== pendingFrag.anomalyId))
+    setPending(null)
   }
 
   const dotColor = scanning ? 'bg-accent animate-pulse'
@@ -262,7 +265,7 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
       <NotebookSelectModal
         open={!!pendingFrag}
         notebooks={notebooks}
-        fragment={pendingFrag}
+        fragment={pendingFrag?.frag}
         onSelect={handleNotebookSelect}
         onClose={() => setPending(null)}
       />

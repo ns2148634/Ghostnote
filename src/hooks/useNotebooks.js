@@ -57,6 +57,12 @@ export function useNotebooks(playerId) {
     await fetch()
   }, [fetch])
 
+  const renameNotebook = useCallback(async (notebookId, name) => {
+    if (!name) return
+    await supabase.from('notebooks').update({ name }).eq('id', notebookId)
+    await fetch()
+  }, [fetch])
+
   const seal = useCallback(async (notebookId) => {
     const nb = notebooks.find(n => n.id === notebookId)
     if (!nb || !nb.fragments?.length) return { ok: false, msg: '還有什麼沒被記下來。' }
@@ -130,5 +136,5 @@ export function useNotebooks(playerId) {
     return { ok: false, msg: '似乎已經完整了，但有什麼不對。' }
   }, [notebooks, playerId, fetch])
 
-  return { notebooks, sealed, loading, refetch: fetch, addFragment, moveFragment, deleteFragment, updateTag, seal }
+  return { notebooks, sealed, loading, refetch: fetch, addFragment, moveFragment, deleteFragment, updateTag, renameNotebook, seal }
 }
