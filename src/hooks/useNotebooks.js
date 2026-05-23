@@ -74,7 +74,7 @@ export function useNotebooks(playerId) {
     if (!stories) return { ok: false, msg: '無法連線。' }
 
     for (const story of stories) {
-      for (const layer of ['basic', 'detail', 'lore']) {
+      for (const layer of ['basic', 'lore']) {
         const { data: req } = await supabase
           .from('story_fragments')
           .select('id')

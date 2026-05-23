@@ -55,6 +55,18 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
 
   function jitter(max = 0.009) { return (Math.random() - 0.5) * 2 * max }
 
+  function randomPick(arr) { return arr[Math.floor(Math.random() * arr.length)] }
+  function pickN(arr, n) {
+    const copy = [...arr]
+    const out = []
+    while (out.length < n && copy.length) {
+      const i = Math.floor(Math.random() * copy.length)
+      out.push(copy.splice(i, 1)[0])
+    }
+    return out
+  }
+  function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5) }
+
   async function handleScan() {
     if (scanning || stamina < 1) return
     setScanning(true)
@@ -65,11 +77,11 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
     const centre = pos || { lat: 25.0478, lng: 121.5319 }
     try { await getWeatherCondition(centre.lat, centre.lng) } catch {}
 
-    const { data: eligibleNodes } = await supabase
-      .from('exploration_nodes')
+    const { data: eligibleScenes } = await supabase
+      .from('fragment_scenes')
       .select('story_fragment_id')
-      .gt('layer_index', 0)
-    const ids = [...new Set((eligibleNodes || []).map(n => n.story_fragment_id))]
+      .gte('layer_index', 1)
+    const ids = [...new Set((eligibleScenes || []).map(n => n.story_fragment_id))]
     const count = 3 + Math.floor(Math.random() * 3)
 
     const spots = Array.from({ length: count }, () => ({
@@ -88,19 +100,46 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
 
   async function handleAnomalyClick(anomaly) {
     if (!anomaly.eligibleIds.length) return
-    const pick = anomaly.eligibleIds[Math.floor(Math.random() * anomaly.eligibleIds.length)]
-    const [{ data: frag }, { data: nodes }] = await Promise.all([
-      supabase.from('story_fragments').select('*').eq('id', pick).single(),
-      supabase.from('exploration_nodes').select('*').eq('story_fragment_id', pick).order('layer_index'),
+    const fragmentId = randomPick(anomaly.eligibleIds)
+
+    const [{ data: frag }, { data: atmospheres }, { data: scenes }] = await Promise.all([
+      supabase.from('story_fragments').select('*').eq('id', fragmentId).single(),
+      supabase.from('fragment_atmosphere').select('*').eq('story_fragment_id', fragmentId),
+      supabase.from('fragment_scenes').select('*').eq('story_fragment_id', fragmentId).order('layer_index'),
     ])
-    if (!frag || !nodes) return
-    const atm = nodes.find(n => n.layer_index === 0)
-    const layers = nodes.filter(n => n.layer_index > 0).map(n => ({
-      sceneText: n.atmosphere_text,
-      options: (n.options || []).map(o => ({ text: o.text, isCorrect: o.is_correct, failText: o.fail_text })),
-    }))
+    if (!frag) return
+
+    const atmRow = randomPick(atmospheres || [])
+    const atmosphereText = atmRow?.atmosphere_text || '這裡有什麼不尋常。'
+
+    const layerIndices = [...new Set((scenes || []).map(s => s.layer_index))].sort()
+    const layers = []
+    for (const idx of layerIndices) {
+      const pool = (scenes || []).filter(s => s.layer_index === idx)
+      const scene = randomPick(pool)
+      if (!scene) continue
+
+      const { data: allOptions } = await supabase
+        .from('scene_options')
+        .select('*')
+        .eq('scene_id', scene.id)
+
+      const correct = randomPick((allOptions || []).filter(o => o.is_correct))
+      const wrongs = pickN((allOptions || []).filter(o => !o.is_correct), 2)
+      if (!correct) continue
+
+      layers.push({
+        sceneText: scene.atmosphere_text,
+        options: shuffle([correct, ...wrongs]).map(o => ({
+          text: o.text,
+          isCorrect: o.is_correct,
+          failText: o.fail_text,
+        })),
+      })
+    }
+
     setNoStamina(false)
-    setOverlay({ anomalyId: anomaly.id, atmosphereText: atm?.atmosphere_text || '這裡有什麼不尋常。', layers, fragment: frag })
+    setOverlay({ anomalyId: anomaly.id, atmosphereText, layers, fragment: frag })
   }
 
   async function handleDeepen() {
