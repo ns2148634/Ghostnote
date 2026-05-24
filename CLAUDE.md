@@ -164,6 +164,19 @@ async function getLayerContent(fragmentId, layerIndex) {
 - 三個選項隨機排序，玩家不知道哪個對
 - 選錯任何一層直接結束，異常點已消失（深入探查時就移除了）
 
+> ⚠️ **CTE 遷移陷阱**：PostgreSQL CTE snapshot 機制導致同一語句內 CTE 寫入的列對其他查詢不可見，必須透過 `RETURNING` 引用。`003_scene_pool.sql` 用兩個 CTE（`inserted_scenes` + `expanded_opts`）並在主 INSERT 中 JOIN `inserted_scenes`（RETURNING 結果），而非查詢 `fragment_scenes` 表本身。
+>
+> 若已執行舊版遷移導致 `scene_options` 空白，在 Supabase SQL Editor 補跑：
+> ```sql
+> INSERT INTO scene_options (scene_id, text, is_correct, fail_text)
+> SELECT fs.id, (opt->>'text')::TEXT, (opt->>'is_correct')::BOOLEAN, COALESCE(opt->>'fail_text', '')
+> FROM exploration_nodes en
+> JOIN fragment_scenes fs ON fs.story_fragment_id = en.story_fragment_id AND fs.layer_index = en.layer_index
+> CROSS JOIN LATERAL jsonb_array_elements(en.options) AS opt
+> WHERE en.layer_index >= 1 AND en.options IS NOT NULL AND jsonb_array_length(en.options) > 0
+> ON CONFLICT DO NOTHING;
+> ```
+
 ### 鬼怪等級與探查層數
 
 | 等級 | 基礎版碎片 | 鬼怪志額外碎片 | 探查層數 |
