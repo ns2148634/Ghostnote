@@ -60,33 +60,33 @@ WHERE  layer_index = 0
 ON CONFLICT DO NOTHING;
 
 -- layer_index>=1 rows → fragment_scenes (scenes) + scene_options (options)
--- Step 1: insert scenes
-WITH inserted_scenes AS (
+-- NOTE: Must use two CTEs so the main INSERT joins against RETURNING data
+-- (PostgreSQL CTE snapshot: rows inserted by a CTE are invisible to a JOIN
+--  against the same table in the same statement — use RETURNING instead)
+WITH
+inserted_scenes AS (
   INSERT INTO fragment_scenes (id, story_fragment_id, layer_index, atmosphere_text)
   SELECT gen_random_uuid(), story_fragment_id, layer_index, atmosphere_text
   FROM   exploration_nodes
   WHERE  layer_index >= 1
     AND  atmosphere_text IS NOT NULL
   RETURNING id, story_fragment_id, layer_index
-)
--- Step 2: insert options for each scene
--- (exploration_nodes.options is JSONB array: [{text, is_correct, fail_text}])
-INSERT INTO scene_options (scene_id, text, is_correct, fail_text)
-SELECT
-  s.id,
-  (opt->>'text')::TEXT,
-  (opt->>'is_correct')::BOOLEAN,
-  COALESCE(opt->>'fail_text', '')
-FROM (
+),
+expanded_opts AS (
   SELECT en.story_fragment_id, en.layer_index, jsonb_array_elements(en.options) AS opt
   FROM   exploration_nodes en
   WHERE  en.layer_index >= 1
     AND  en.options IS NOT NULL
     AND  jsonb_array_length(en.options) > 0
-) expanded
-JOIN (
-  SELECT fs.id, fs.story_fragment_id, fs.layer_index
-  FROM   fragment_scenes fs
-) s ON s.story_fragment_id = expanded.story_fragment_id
-   AND s.layer_index = expanded.layer_index
+)
+INSERT INTO scene_options (scene_id, text, is_correct, fail_text)
+SELECT
+  s.id,
+  (eo.opt->>'text')::TEXT,
+  (eo.opt->>'is_correct')::BOOLEAN,
+  COALESCE(eo.opt->>'fail_text', '')
+FROM expanded_opts eo
+JOIN inserted_scenes s
+  ON s.story_fragment_id = eo.story_fragment_id
+ AND s.layer_index = eo.layer_index
 ON CONFLICT DO NOTHING;
