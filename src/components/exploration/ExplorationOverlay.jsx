@@ -1,28 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-
-const FONT_SIZES = [
-  { cls: 'text-xs',   leading: 'leading-6' },
-  { cls: 'text-sm',   leading: 'leading-7' },
-  { cls: 'text-base', leading: 'leading-8' },
-  { cls: 'text-lg',   leading: 'leading-9' },
-]
-const FONT_KEY = 'ghostnote_font_size'
-
-function useExplorationFont() {
-  const [idx, setIdx] = useState(() => {
-    const saved = localStorage.getItem(FONT_KEY)
-    const n = parseInt(saved)
-    return isNaN(n) ? 1 : Math.max(0, Math.min(FONT_SIZES.length - 1, n))
-  })
-  function change(delta) {
-    setIdx(prev => {
-      const next = Math.max(0, Math.min(FONT_SIZES.length - 1, prev + delta))
-      localStorage.setItem(FONT_KEY, String(next))
-      return next
-    })
-  }
-  return { fontCls: FONT_SIZES[idx].cls, leadingCls: FONT_SIZES[idx].leading, idx, change }
-}
+import { useReaderFont, FontControls, FONT_SIZES } from '../../hooks/useReaderFont'
 
 function TypewriterText({ text, speed = 35, onDone }) {
   const [displayed, setDisplayed] = useState('')
@@ -66,7 +43,7 @@ export default function ExplorationOverlay({
   const [done, setDone] = useState(false)
   const [busy, setBusy] = useState(false)
   const narrativeRef = useRef([])
-  const { fontCls, leadingCls, idx: fontIdx, change: changeFont } = useExplorationFont()
+  const { fontCls, leadingCls, idx: fontIdx, change: changeFont } = useReaderFont()
 
   useEffect(() => {
     setBodyText(atmosphereText || '')
@@ -118,19 +95,8 @@ export default function ExplorationOverlay({
     <div className="fixed inset-0 bg-[#0d0d0d] z-[2000] flex flex-col fade-in">
 
       {/* Font size controls */}
-      <div className="absolute top-3 right-3 flex items-center gap-3 z-10">
-        <button
-          onClick={() => changeFont(-1)}
-          disabled={fontIdx === 0}
-          className="font-mono text-dim hover:text-muted disabled:opacity-20 transition-colors select-none"
-          style={{ fontSize: '11px' }}
-        >A-</button>
-        <button
-          onClick={() => changeFont(1)}
-          disabled={fontIdx === FONT_SIZES.length - 1}
-          className="font-mono text-dim hover:text-muted disabled:opacity-20 transition-colors select-none"
-          style={{ fontSize: '15px' }}
-        >A+</button>
+      <div className="absolute top-3 right-3 z-10">
+        <FontControls idx={fontIdx} onChange={changeFont} />
       </div>
 
       {/* Scrollable content */}

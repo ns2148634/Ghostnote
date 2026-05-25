@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import Modal from '../components/ui/Modal'
+import { useReaderFont, FontControls } from '../hooks/useReaderFont'
 
-function FragmentCard({ frag, onTagChange, onDelete, onMoveClick, sealed }) {
+function FragmentCard({ frag, onTagChange, onDelete, onMoveClick, sealed, textCls = 'text-xs leading-6' }) {
   const [editingTag, setEditingTag] = useState(false)
   const [tagVal, setTagVal] = useState(frag.player_tag || '')
 
@@ -22,7 +23,7 @@ function FragmentCard({ frag, onTagChange, onDelete, onMoveClick, sealed }) {
           {frag.sf.fragment_label}
         </p>
       )}
-      <p className="font-mono text-muted text-xs leading-6 pr-12">
+      <p className={`font-mono text-muted ${textCls} pr-12 whitespace-pre-line break-words`}>
         {frag.exploration_narrative || frag.sf?.fragment_text || '（碎片文字遺失）'}
       </p>
       {!sealed && (
@@ -65,6 +66,8 @@ function NotebookView({ notebook, allNotebooks, onBack, onTagChange, onDelete, o
   const [confirmDel, setConfirmDel] = useState(null)
   const [editingName, setEditingName] = useState(false)
   const [nameVal, setNameVal]     = useState(notebook.name)
+  const { fontCls, leadingCls, idx: fontIdx, change: changeFont } = useReaderFont()
+  const textCls = `${fontCls} ${leadingCls}`
 
   useEffect(() => { setNameVal(notebook.name) }, [notebook.name])
 
@@ -115,9 +118,12 @@ function NotebookView({ notebook, allNotebooks, onBack, onTagChange, onDelete, o
           </button>
         )}
 
-        <span className="font-mono text-dim text-[10px] shrink-0">
-          {notebook.fragments?.length ?? 0} / {notebook.capacity}
-        </span>
+        <div className="flex items-center gap-3 shrink-0">
+          <FontControls idx={fontIdx} onChange={changeFont} />
+          <span className="font-mono text-dim text-[10px]">
+            {notebook.fragments?.length ?? 0} / {notebook.capacity}
+          </span>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
@@ -132,6 +138,7 @@ function NotebookView({ notebook, allNotebooks, onBack, onTagChange, onDelete, o
             onDelete={id => setConfirmDel(id)}
             onMoveClick={setMoving}
             sealed={false}
+            textCls={textCls}
           />
         ))}
       </div>

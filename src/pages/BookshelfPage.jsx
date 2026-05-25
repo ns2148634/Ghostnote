@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useReaderFont, FontControls } from '../hooks/useReaderFont'
 
 const LAYER_W = { basic: 'w-7', lore: 'w-14' }
 const LAYER_LABEL = { basic: '基礎版', lore: '鬼怪志版' }
@@ -41,8 +42,10 @@ function SealedBook({ notebook, onClick }) {
 }
 
 function SealedModal({ notebook, onClose }) {
+  const { fontCls, leadingCls, idx: fontIdx, change: changeFont } = useReaderFont()
   if (!notebook) return null
   const layer = getLayer(notebook)
+  const textCls = `${fontCls} ${leadingCls}`
   return (
     <div className="fixed inset-0 bg-black/85 z-50 flex items-end justify-center"
          onClick={onClose}>
@@ -54,12 +57,15 @@ function SealedModal({ notebook, onClose }) {
             <p className="font-mono text-dim text-xs tracking-widest">{LAYER_LABEL[layer]}</p>
             <p className="font-mono text-ink text-base mt-0.5">{notebook.story?.title || notebook.name}</p>
           </div>
-          <button onClick={onClose} className="font-mono text-dim text-lg hover:text-muted transition-colors leading-none mt-1">✕</button>
+          <div className="flex items-center gap-3 mt-1">
+            <FontControls idx={fontIdx} onChange={changeFont} />
+            <button onClick={onClose} className="font-mono text-dim text-lg hover:text-muted transition-colors leading-none">✕</button>
+          </div>
         </div>
         {/* Sealed story or fragment list */}
         <div className="px-5 py-4 flex flex-col gap-3">
           {notebook.sealed_story ? (
-            <p className="font-mono text-muted text-xs leading-8 whitespace-pre-line">
+            <p className={`font-mono text-muted ${textCls} whitespace-pre-line break-words`}>
               {notebook.sealed_story}
             </p>
           ) : (
@@ -77,7 +83,7 @@ function SealedModal({ notebook, onClose }) {
                   {f.sf?.fragment_label && (
                     <p className="font-mono text-accent/70 text-[10px] tracking-wider mb-1">{f.sf.fragment_label}</p>
                   )}
-                  <p className="font-mono text-muted text-xs leading-7 pr-12">
+                  <p className={`font-mono text-muted ${textCls} pr-12 whitespace-pre-line break-words`}>
                     {f.exploration_narrative || f.sf?.fragment_text || '（文字遺失）'}
                   </p>
                 </div>
