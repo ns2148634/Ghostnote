@@ -140,8 +140,7 @@ export default function ExplorationOverlay({
                     <button
                       key={i}
                       onClick={() => handleChoice(opt)}
-                      className="text-left font-mono text-accent text-xs leading-6 hover:text-ink transition-colors
-                                 underline underline-offset-4 decoration-dim break-words"
+                      className={`text-left font-mono text-accent ${textCls} hover:text-ink transition-colors underline underline-offset-4 decoration-dim break-words`}
                     >
                       {opt.text}
                     </button>
