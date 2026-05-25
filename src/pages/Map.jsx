@@ -15,8 +15,8 @@ function toScreen(playerPos, anomaly) {
   const dy = -(anomaly.lat - centre.lat) * 110540
   const pctPerMeter = 0.028   // ~1 km = ±28 % from centre
   return {
-    x: Math.max(6, Math.min(94, 50 + dx * pctPerMeter)),
-    y: Math.max(6, Math.min(94, 50 + dy * pctPerMeter)),
+    x: Math.max(12, Math.min(88, 50 + dx * pctPerMeter)),
+    y: Math.max(12, Math.min(88, 50 + dy * pctPerMeter)),
   }
 }
 
@@ -124,18 +124,23 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
         .select('*')
         .eq('scene_id', scene.id)
 
-      const correct = randomPick((allOptions || []).filter(o => o.is_correct))
-      const wrongs = pickN((allOptions || []).filter(o => !o.is_correct), 2)
-      if (!correct) continue
-
-      layers.push({
-        sceneText: scene.atmosphere_text,
-        options: shuffle([correct, ...wrongs]).map(o => ({
-          text: o.text,
-          isCorrect: o.is_correct,
-          failText: o.fail_text,
-        })),
-      })
+      if (scene.is_skippable) {
+        const opts = (allOptions || []).map(o => ({ text: o.text, isCorrect: true, failText: '' }))
+        if (opts.length === 0) continue
+        layers.push({ sceneText: scene.atmosphere_text, options: shuffle(opts) })
+      } else {
+        const correct = randomPick((allOptions || []).filter(o => o.is_correct))
+        const wrongs = pickN((allOptions || []).filter(o => !o.is_correct), 2)
+        if (!correct) continue
+        layers.push({
+          sceneText: scene.atmosphere_text,
+          options: shuffle([correct, ...wrongs]).map(o => ({
+            text: o.text,
+            isCorrect: o.is_correct,
+            failText: o.fail_text,
+          })),
+        })
+      }
     }
 
     setNoStamina(false)
