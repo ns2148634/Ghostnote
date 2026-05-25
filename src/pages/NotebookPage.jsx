@@ -17,8 +17,13 @@ function FragmentCard({ frag, onTagChange, onDelete, onMoveClick, sealed }) {
           {frag.player_tag}
         </span>
       )}
+      {frag.sf?.fragment_label && (
+        <p className="font-mono text-accent/80 text-[10px] tracking-wider mb-1.5">
+          {frag.sf.fragment_label}
+        </p>
+      )}
       <p className="font-mono text-muted text-xs leading-6 pr-12">
-        {frag.sf?.text || '（碎片文字遺失）'}
+        {frag.exploration_narrative || frag.sf?.fragment_text || '（碎片文字遺失）'}
       </p>
       {!sealed && (
         <div className="flex gap-4 mt-3 opacity-0 group-hover:opacity-100 transition-opacity">

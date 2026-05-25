@@ -150,14 +150,14 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
     return true
   }
 
-  function handleSuccess(frag) {
-    setPending({ frag, anomalyId: overlay.anomalyId })
+  function handleSuccess(frag, narrative) {
+    setPending({ frag, anomalyId: overlay.anomalyId, narrative })
     setOverlay(null)
   }
 
   async function handleNotebookSelect(notebookId) {
     if (!pendingFrag) return
-    await addFragment(notebookId, pendingFrag.frag.id)
+    await addFragment(notebookId, pendingFrag.frag.id, pendingFrag.narrative || '')
     setPending(null)
   }
 

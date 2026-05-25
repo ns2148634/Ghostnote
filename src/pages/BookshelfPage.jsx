@@ -1,12 +1,11 @@
 import { useState } from 'react'
 
-const LAYER_W = { basic: 'w-7', detail: 'w-10', lore: 'w-14' }
-const LAYER_LABEL = { basic: '基礎版', detail: '細節版', lore: '鬼怪志版' }
+const LAYER_W = { basic: 'w-7', lore: 'w-14' }
+const LAYER_LABEL = { basic: '基礎版', lore: '鬼怪志版' }
 
 function getLayer(nb) {
-  if (nb.story?.difficulty === 'advanced')     return 'lore'
-  if (nb.story?.difficulty === 'intermediate') return 'detail'
-  return 'basic'
+  const hasLore = (nb.fragments || []).some(f => f.sf?.layer === 'lore')
+  return hasLore ? 'lore' : 'basic'
 }
 
 function SealedBook({ notebook, onClick }) {
@@ -56,21 +55,34 @@ function SealedModal({ notebook, onClose }) {
           </div>
           <button onClick={onClose} className="font-mono text-dim text-lg hover:text-muted transition-colors leading-none mt-1">✕</button>
         </div>
-        {/* Fragments */}
+        {/* Sealed story or fragment list */}
         <div className="px-5 py-4 flex flex-col gap-3">
-          {(!notebook.fragments || notebook.fragments.length === 0) && (
-            <p className="font-mono text-dim text-sm text-center py-4">（無碎片記錄）</p>
-          )}
-          {(notebook.fragments || []).map(f => (
-            <div key={f.id} className="border border-border/60 p-4 bg-[#111] relative">
-              {f.player_tag && (
-                <span className="absolute top-2.5 right-2.5 font-mono text-[10px] text-accent/60 bg-dim/20 px-1.5 py-0.5">
-                  {f.player_tag}
-                </span>
+          {notebook.sealed_story ? (
+            <p className="font-mono text-muted text-xs leading-8 whitespace-pre-line">
+              {notebook.sealed_story}
+            </p>
+          ) : (
+            <>
+              {(!notebook.fragments || notebook.fragments.length === 0) && (
+                <p className="font-mono text-dim text-sm text-center py-4">（無碎片記錄）</p>
               )}
-              <p className="font-mono text-muted text-sm leading-7 pr-12">{f.sf?.text || '（文字遺失）'}</p>
-            </div>
-          ))}
+              {(notebook.fragments || []).map(f => (
+                <div key={f.id} className="border border-border/60 p-4 bg-[#111] relative">
+                  {f.player_tag && (
+                    <span className="absolute top-2.5 right-2.5 font-mono text-[10px] text-accent/60 bg-dim/20 px-1.5 py-0.5">
+                      {f.player_tag}
+                    </span>
+                  )}
+                  {f.sf?.fragment_label && (
+                    <p className="font-mono text-accent/70 text-[10px] tracking-wider mb-1">{f.sf.fragment_label}</p>
+                  )}
+                  <p className="font-mono text-muted text-xs leading-7 pr-12">
+                    {f.exploration_narrative || f.sf?.fragment_text || '（文字遺失）'}
+                  </p>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       </div>
     </div>

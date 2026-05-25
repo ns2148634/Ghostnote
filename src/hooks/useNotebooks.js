@@ -29,7 +29,7 @@ export function useNotebooks(playerId) {
 
   useEffect(() => { fetch() }, [fetch])
 
-  const addFragment = useCallback(async (notebookId, storyFragmentId) => {
+  const addFragment = useCallback(async (notebookId, storyFragmentId, explorationNarrative = '') => {
     const nb = notebooks.find(n => n.id === notebookId)
     if (!nb || (nb.fragments?.length ?? 0) >= nb.capacity) return false
 
@@ -37,6 +37,7 @@ export function useNotebooks(playerId) {
       player_id: playerId,
       story_fragment_id: storyFragmentId,
       notebook_id: notebookId,
+      exploration_narrative: explorationNarrative || null,
     })
     if (!error) await fetch()
     return !error
@@ -69,8 +70,10 @@ export function useNotebooks(playerId) {
 
     const fragIds = nb.fragments.map(f => f.story_fragment_id)
 
-    // Fetch all stories
-    const { data: stories } = await supabase.from('stories').select('id')
+    // Fetch all stories (with narrative templates)
+    const { data: stories } = await supabase
+      .from('stories')
+      .select('id, sealed_narrative, lore_narrative')
     if (!stories) return { ok: false, msg: '無法連線。' }
 
     for (const story of stories) {
@@ -94,9 +97,24 @@ export function useNotebooks(playerId) {
         const storySet = new Set((allSF || []).map(f => f.story_id))
         if (storySet.size > 1) break // contaminated
 
+        // Generate sealed_story from narrative template
+        let sealedStory = null
+        if (layer === 'lore' && story.lore_narrative) {
+          sealedStory = story.lore_narrative
+        } else if (story.sealed_narrative) {
+          sealedStory = story.sealed_narrative
+          for (const frag of nb.fragments || []) {
+            const label = frag.sf?.fragment_label
+            const narrative = frag.exploration_narrative || frag.sf?.fragment_text || ''
+            if (label) sealedStory = sealedStory.replace(`{${label}}`, narrative)
+          }
+        }
+
         // Success
         await supabase.from('notebooks').update({
-          status: 'sealed', story_id: story.id, sealed_at: new Date().toISOString(),
+          status: 'sealed', story_id: story.id,
+          sealed_at: new Date().toISOString(),
+          sealed_story: sealedStory,
         }).eq('id', notebookId)
 
         await supabase.from('creature_pages').upsert({

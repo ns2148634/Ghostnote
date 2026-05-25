@@ -34,12 +34,11 @@ npm run dev
 
 ## 資料庫
 
-遷移檔案在 `supabase/migrations/`：
+遷移檔案在 `supabase/migrations/`，依序在 Supabase SQL Editor 執行：
 - `001_schema.sql` — 所有表格定義 + RLS 政策
-- `002_seed.sql` — 故事內容（屍鼠、三樓的轉學生）
-- `003_scene_pool.sql` — 新增場景池三個表格（待建立）
-
-在 Supabase SQL Editor 依序執行即可。
+- `002_seed.sql` — 舊版 seed（已由 004 取代，勿重複執行）
+- `003_scene_pool.sql` — 場景池三個表格 + RLS
+- `004_schema_v2.sql` — Schema v2：清除舊資料、欄位調整、屍鼠完整 seed
 
 ## Supabase Auth 設定
 
@@ -139,7 +138,6 @@ async function getAtmosphere(fragmentId) {
 
 // 2. 每層選擇題：從場景池抽場景，再從選項池抽三個
 async function getLayerContent(fragmentId, layerIndex) {
-  // 隨機抽一個場景
   const { data: scenes } = await supabase
     .from('fragment_scenes')
     .select('*')
@@ -147,7 +145,6 @@ async function getLayerContent(fragmentId, layerIndex) {
     .eq('layer_index', layerIndex)
   const scene = randomPick(scenes)
 
-  // 從選項池抽三個（必須含一個正確）
   const { data: allOptions } = await supabase
     .from('scene_options')
     .select('*')
@@ -164,26 +161,31 @@ async function getLayerContent(fragmentId, layerIndex) {
 - 三個選項隨機排序，玩家不知道哪個對
 - 選錯任何一層直接結束，異常點已消失（深入探查時就移除了）
 
-> ⚠️ **CTE 遷移陷阱**：PostgreSQL CTE snapshot 機制導致同一語句內 CTE 寫入的列對其他查詢不可見，必須透過 `RETURNING` 引用。`003_scene_pool.sql` 用兩個 CTE（`inserted_scenes` + `expanded_opts`）並在主 INSERT 中 JOIN `inserted_scenes`（RETURNING 結果），而非查詢 `fragment_scenes` 表本身。
->
-> 若已執行舊版遷移導致 `scene_options` 空白，在 Supabase SQL Editor 補跑：
+> ⚠️ **CTE 遷移陷阱**：PostgreSQL CTE snapshot 機制導致同一語句內 CTE 寫入的列對其他查詢不可見，必須透過 `RETURNING` 引用。每個場景必須用獨立的 CTE 寫法：
 > ```sql
+> WITH inserted_scene AS (
+>   INSERT INTO fragment_scenes (story_fragment_id, layer_index, atmosphere_text)
+>   VALUES ('uuid', 1, '場景文字')
+>   RETURNING id
+> )
 > INSERT INTO scene_options (scene_id, text, is_correct, fail_text)
-> SELECT fs.id, (opt->>'text')::TEXT, (opt->>'is_correct')::BOOLEAN, COALESCE(opt->>'fail_text', '')
-> FROM exploration_nodes en
-> JOIN fragment_scenes fs ON fs.story_fragment_id = en.story_fragment_id AND fs.layer_index = en.layer_index
-> CROSS JOIN LATERAL jsonb_array_elements(en.options) AS opt
-> WHERE en.layer_index >= 1 AND en.options IS NOT NULL AND jsonb_array_length(en.options) > 0
-> ON CONFLICT DO NOTHING;
+> SELECT id, opt.text, opt.is_correct, opt.fail_text
+> FROM inserted_scene
+> CROSS JOIN (VALUES
+>   ('選項文字', true, ''),
+>   ('錯誤選項', false, '失敗敘述')
+> ) AS opt(text, is_correct, fail_text);
 > ```
 
 ### 鬼怪等級與探查層數
 
-| 等級 | 基礎版碎片 | 鬼怪志額外碎片 | 探查層數 |
-|------|-----------|--------------|----------|
-| 普通（normal） | 4-6 片 | +3-4 片 | 3 層 |
-| 稀有（rare） | 7-9 片 | +4-5 片 | 4 層 |
-| 傳說（legendary） | 10-13 片 | +5-6 片 | 5 層 |
+> ⚠️ **資料庫實際 constraint 值**，與下方顯示名稱的對應關係：
+
+| 顯示名稱 | stories.difficulty | story_fragments.difficulty | 基礎版碎片 | 鬼怪志碎片 | 探查層數 |
+|---------|-------------------|--------------------------|-----------|-----------|---------|
+| 入門（beginner） | `beginner` | `normal` | 4-6 片 | +3-4 片 | 3 層 |
+| 中級（intermediate） | `intermediate` | `normal` | 7-9 片 | +4-5 片 | 4 層 |
+| 高級（advanced） | `advanced` | `hard` | 10-13 片 | +5-6 片 | 5 層 |
 
 探查層數由 `stories.difficulty` 決定，`ExplorationOverlay` 依此決定要走幾層。
 
@@ -211,13 +213,13 @@ async function getLayerContent(fragmentId, layerIndex) {
 
 ### 新增故事內容（新架構）
 
-依序在以下表格插入資料：
+使用 `content-generation-prompt.md` 模板給 AI 生成 SQL，依序插入：
 
-1. `stories` — 鬼怪基本資料
-2. `story_fragments` — 碎片定義（layer: 'basic' 或 'lore'）
-3. `fragment_atmosphere` — 每片碎片的免費氛圍描述（建議 3-5 條）
-4. `fragment_scenes` — 每片碎片每層的場景（建議每層 3-5 個，layer_index 從 1 開始）
-5. `scene_options` — 每個場景的選項（建議 2-3 個正確、4-6 個錯誤）
+1. `stories` — 含 `sealed_narrative`（基礎版骨架，`{fragment_label}` 佔位符）和 `lore_narrative`（鬼怪志固定文字）
+2. `story_fragments` — 含 `fragment_label`（痕跡標籤）+ `fragment_text`（痕跡描述）+ `rarity`（common/rare）
+3. `fragment_atmosphere` — 每片碎片 3-5 條氛圍描述
+4. `fragment_scenes` — 每片碎片每層 3-5 個場景，含 `is_skippable`（basic 第一層可為 true）
+5. `scene_options` — is_skippable=false：2-3 正確 + 4-6 錯誤；is_skippable=true：全部 is_correct=true
 
 > ⚠️ 沒有 `fragment_scenes.layer_index >= 1` 記錄的碎片**不會出現在掃描候選清單**中。
 
@@ -229,47 +231,48 @@ id UUID, title TEXT,
 difficulty TEXT,          -- 'normal'|'rare'|'legendary'
 creature_type TEXT,
 creature_description TEXT,
-created_at TIMESTAMPTZ
+sealed_narrative TEXT,    -- 基礎版故事骨架，含 {fragment_label} 佔位符
+lore_narrative TEXT       -- 鬼怪志版固定故事（樣貌、起源、能力）
 ```
 
 ### story_fragments
 ```sql
 id UUID, story_id UUID,
 layer TEXT,               -- 'basic'|'lore'
-text TEXT,                -- 碎片正文（玩家放入筆記本看到的文字）
-time_condition TEXT,      -- NULL|'dawn'|'day'|'dusk'|'night'
-weather_condition TEXT,   -- NULL|'clear'|'cloudy'|'rain'|'fog'
-date_condition TEXT,      -- NULL|'ghost_month'|'qingming'|'dongzhi'
-motif_tags TEXT[] DEFAULT '{}',
-is_user_submitted BOOLEAN DEFAULT false
+rarity TEXT,              -- 'common'|'rare'
+fragment_label TEXT,      -- 痕跡標籤（短，幾個字）→ sealed_narrative 佔位符對應
+fragment_text TEXT,       -- 痕跡描述（一句話）
+time_condition TEXT, weather_condition TEXT, date_condition TEXT,
+motif_tags TEXT[] DEFAULT '{}', is_user_submitted BOOLEAN DEFAULT false
 ```
 
-### fragment_atmosphere（新表）
+### fragment_atmosphere
 ```sql
 id UUID, story_fragment_id UUID,
 atmosphere_text TEXT      -- 第一人稱，3-5句，只描述異常不說原因
 ```
 
-### fragment_scenes（新表）
+### fragment_scenes
 ```sql
 id UUID, story_fragment_id UUID,
-layer_index INTEGER,      -- 1開始，對應探查層數
-atmosphere_text TEXT      -- 這個場景的敘事推進文字
+layer_index INTEGER,      -- 1開始
+atmosphere_text TEXT,     -- 場景敘事推進文字（構成 exploration_narrative）
+is_skippable BOOLEAN      -- true=氛圍層選什麼都過；false=有對錯
 ```
 
-### scene_options（新表）
+### scene_options
 ```sql
 id UUID, scene_id UUID,
-text TEXT,                -- 選項文字
-is_correct BOOLEAN,
-fail_text TEXT            -- 正確選項填 ''，錯誤選項填選錯後的氛圍敘述
+text TEXT, is_correct BOOLEAN,
+fail_text TEXT            -- 正確選項填 ''；is_skippable 層全填 ''
 ```
 
 ### fragments（玩家持有）
 ```sql
 id UUID, player_id UUID, story_fragment_id UUID,
-notebook_id UUID,         -- 必定在某一本筆記本中，沒有背包
-player_tag TEXT,          -- 玩家自己加的便利貼標籤
+notebook_id UUID,
+player_tag TEXT,
+exploration_narrative TEXT,  -- 玩家走過的場景敘事串聯
 obtained_at TIMESTAMPTZ
 ```
 
@@ -277,9 +280,10 @@ obtained_at TIMESTAMPTZ
 ```sql
 id UUID, player_id UUID, name TEXT,
 capacity INTEGER DEFAULT 15,
-type TEXT DEFAULT 'personal',   -- 'personal'|'shared'
-status TEXT DEFAULT 'active',   -- 'active'|'sealed'
-sealed_at TIMESTAMPTZ, story_id UUID
+type TEXT DEFAULT 'personal',
+status TEXT DEFAULT 'active',  -- 'active'|'sealed'
+sealed_at TIMESTAMPTZ, story_id UUID,
+sealed_story TEXT              -- 封存後生成的完整故事（sealed_narrative 填入探查敘事）
 ```
 
 ### creature_pages
@@ -288,6 +292,20 @@ id UUID, player_id UUID, story_id UUID,
 unlocked_layer TEXT,      -- 'basic'|'lore'
 obtained_at TIMESTAMPTZ
 ```
+
+## AI 生成故事 SQL 的鐵則
+
+使用 `content-generation-prompt.md` 作為模板（v4）。關鍵規則：
+
+1. **所有 id 必須是合法 UUID 格式**，每個不同
+2. **stories.difficulty** 只能填 `'normal'`、`'rare'`、`'legendary'`
+3. **story_fragments.layer** 只能填 `'basic'`、`'lore'`
+4. **story_fragments.rarity** 只能填 `'common'`、`'rare'`
+5. **story_fragments 不再有 `difficulty` 或 `text` 欄位**，改為 `fragment_label` + `fragment_text`
+6. **fragment_scenes 必須包含 `is_skippable`**（basic 第一層可 true；lore 全部 false）
+7. **sealed_narrative 的 `{佔位符}` 必須和 `fragment_label` 完全一致**
+8. **lore_narrative 是固定文字，不含佔位符**
+9. **單引號用 `''` 跳脫**，不使用反斜線
 
 ## 尚未實作
 

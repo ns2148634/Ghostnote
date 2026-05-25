@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 function TypewriterText({ text, speed = 35, onDone }) {
   const [displayed, setDisplayed] = useState('')
@@ -26,7 +26,7 @@ function TypewriterText({ text, speed = 35, onDone }) {
   )
 }
 
-// phase: 'atmosphere' | 'confirm' | 'layer' | 'success' | 'fail'
+// phase: 'atmosphere' | 'layer' | 'success' | 'fail'
 export default function ExplorationOverlay({
   atmosphereText,
   layers = [],       // [{sceneText, options:[{text,isCorrect,failText}]}]
@@ -34,19 +34,21 @@ export default function ExplorationOverlay({
   noStamina,
   onClose,
   onDeepen,          // async fn, returns bool (stamina ok)
-  onSuccess,         // fn(fragment)
+  onSuccess,         // fn(fragment, narrative)
 }) {
   const [phase, setPhase] = useState('atmosphere')
   const [layerIdx, setLayerIdx] = useState(0)
   const [bodyText, setBodyText] = useState(atmosphereText || '')
   const [done, setDone] = useState(false)
   const [busy, setBusy] = useState(false)
+  const narrativeRef = useRef([])
 
   useEffect(() => {
     setBodyText(atmosphereText || '')
     setDone(false)
     setPhase('atmosphere')
     setLayerIdx(0)
+    narrativeRef.current = []
   }, [atmosphereText])
 
   async function handleDeepen() {
@@ -55,12 +57,12 @@ export default function ExplorationOverlay({
     setBusy(false)
     if (!ok) return
     if (layers.length === 0) {
-      // Fragment has no exploration layers — fail gracefully
       setBodyText('氣息已散去，什麼都沒有留下。')
       setDone(true)
       setPhase('fail')
       return
     }
+    narrativeRef.current = []
     setBodyText(layers[0].sceneText)
     setDone(false)
     setPhase('layer')
@@ -69,6 +71,7 @@ export default function ExplorationOverlay({
 
   function handleChoice(opt) {
     if (opt.isCorrect) {
+      narrativeRef.current = [...narrativeRef.current, layers[layerIdx].sceneText]
       const next = layerIdx + 1
       if (next < layers.length) {
         setBodyText(layers[next].sceneText)
@@ -157,13 +160,16 @@ export default function ExplorationOverlay({
             <p className="font-mono text-muted text-xs tracking-widest">── 碎片 ──</p>
             {fragment && (
               <div className="border border-dim p-5 bg-[#111]">
-                <p className="font-mono text-accent text-xs leading-7 whitespace-pre-line">
-                  {fragment.text}
+                <p className="font-mono text-accent text-[11px] tracking-wider mb-2">
+                  {fragment.fragment_label}
+                </p>
+                <p className="font-mono text-muted text-xs leading-7">
+                  {fragment.fragment_text}
                 </p>
               </div>
             )}
             <button
-              onClick={() => onSuccess(fragment)}
+              onClick={() => onSuccess(fragment, narrativeRef.current.join('\n'))}
               className="font-mono text-accent text-xs tracking-widest hover:text-ink transition-colors
                          underline underline-offset-4 decoration-dim self-start"
             >
