@@ -97,12 +97,21 @@ current = min(10, stored + floor((now - updated_at) / 8分鐘))
    - 有異鬼怪碎片：「這裡裝了不該裝的東西」
    - 數量符合但組合錯：「似乎已經完整了，但有什麼不對」
 
+**基礎版封存**：集齊所有 `layer='basic'` 碎片 → 玩家探查敘事填入 `sealed_narrative` 骨架 → 生成「調查員的目擊側寫」，每個玩家版本不同
+
+**鬼怪志版封存**：集齊所有 `layer='basic'` + `layer='lore'` 碎片 → 直接存入 `lore_narrative` 固定文字 → 生成「鬼怪的完整檔案」（樣貌、起源、能力），固定內容
+
 ### 探查流程（Map.jsx + ExplorationOverlay.jsx）
 
 ```
-點擊玩家定位點（-1體力）→ 異常點生成 → 點擊異常點（免費氛圍描述）
-→ 深入探查（-1體力）→ 異常點立即消失 → 多層選擇題 → 成功/失敗
-→ 成功：NotebookSelectModal 選擇目標筆記本 → 放入碎片
+點擊玩家定位點（-1體力）→ 異常點生成
+→ 點擊異常點（免費氛圍描述，從 fragment_atmosphere 隨機抽）
+  ※ 氛圍描述是玩家站在外面遠遠看到/聽到/感覺到的異常
+  ※ 例：廢棄大樓透著燈光、暗巷中一動不動的身影、走廊燈規律閃爍
+  ※ 玩家據此判斷要不要深入探查，不描述進入現場後的事
+→ 深入探查（-1體力）→ 異常點立即消失 → 進入場景選擇題（才是現場遭遇）
+→ 多層選擇題 → 成功/失敗
+→ 成功：NotebookSelectModal 選擇目標筆記本 → 放入碎片（一次探索只得一個碎片）
 ```
 
 **關鍵設計決策**：
@@ -128,7 +137,7 @@ current = min(10, stored + floor((now - updated_at) / 8分鐘))
 每片碎片有三層獨立的內容池，探查時動態隨機抽取：
 
 ```javascript
-// 1. 免費氛圍描述：從 fragment_atmosphere 隨機抽一條
+// 1. 免費氛圍描述：從 fragment_atmosphere 隨機抽一條（現場外的異常觀察）
 // 2. 每層選擇題：取該層唯一場景，依 is_skippable 決定選項組合
 
 // is_skippable=true（氛圍通過層）：顯示全部選項（都是 is_correct=true），任選都過
@@ -146,16 +155,16 @@ else {
 
 **規則**：
 - **每片碎片每層只能有 1 個場景**（若同層有多個場景，隨機 pick 到無選項的場景會使該層被跳過，導致 layers=[] → 失敗）
-- `is_skippable=true` 層顯示所有正確選項（全部 is_correct=true），玩家選任何一個都前進
-- `is_skippable=false` 層顯示 1 正確 + 2 隨機錯誤，選錯直接結束
+- `is_skippable=true` 層顯示所有正確選項（全部 is_correct=true），玩家選任何一個都前進；僅用於 basic 碎片的氛圍鋪陳層
+- `is_skippable=false` 層顯示 1 正確 + 2 隨機錯誤，選錯直接結束；**lore 碎片所有層必須為 false**
 - 選項隨機排序，玩家不知道哪個對
 - 選錯任何一層直接結束，異常點已消失（深入探查時就移除了）
 
 > ⚠️ **CTE 遷移陷阱**：PostgreSQL CTE snapshot 機制導致同一語句內 CTE 寫入的列對其他查詢不可見，必須透過 `RETURNING` 引用。每個場景必須用獨立的 CTE 寫法：
 > ```sql
 > WITH inserted_scene AS (
->   INSERT INTO fragment_scenes (story_fragment_id, layer_index, atmosphere_text)
->   VALUES ('uuid', 1, '場景文字')
+>   INSERT INTO fragment_scenes (story_fragment_id, layer_index, atmosphere_text, is_skippable)
+>   VALUES ('uuid', 1, '場景文字', false)
 >   RETURNING id
 > )
 > INSERT INTO scene_options (scene_id, text, is_correct, fail_text)
@@ -176,6 +185,14 @@ else {
 | `legendary`       | 10-13 片  | +5-6 片   | 5 層    |
 
 > ⚠️ 探查層數由 `fragment_scenes.layer_index` 的實際數量決定（目前固定 3 層）。`ExplorationOverlay` 依 `stories.difficulty` 決定要走幾層尚未實作，見「尚未實作」節。
+
+### 碎片分類
+
+| layer | rarity | 說明 | 探查體驗 | 封存用途 |
+|-------|--------|------|----------|----------|
+| basic | common | 一般遭遇，看到蹤跡與異常現象 | 玩家敘事，各人不同 | 基礎版筆記本 |
+| basic | rare | 稀有遭遇，更強烈的異常現象 | 玩家敘事，各人不同 | 基礎版筆記本 |
+| lore | rare | 直接遭遇鬼怪本體，看清楚樣子 | 壓迫感最強，所有層皆有對錯 | 鬼怪志版筆記本（必要條件） |
 
 ### Auth 流程
 
@@ -204,9 +221,9 @@ else {
 使用 `content-generation-prompt.md` 模板給 AI 生成 SQL，依序插入：
 
 1. `stories` — 含 `sealed_narrative`（基礎版骨架，`{fragment_label}` 佔位符）和 `lore_narrative`（鬼怪志固定文字）
-2. `story_fragments` — 含 `fragment_label`（痕跡標籤）+ `fragment_text`（痕跡描述）+ `rarity`（common/rare）
-3. `fragment_atmosphere` — 每片碎片 3-5 條氛圍描述
-4. `fragment_scenes` — 每片碎片**每層恰好 1 個場景**，含 `is_skippable`（basic 第一層可為 true；lore 全部 false）
+2. `story_fragments` — 含 `fragment_label`（痕跡標籤）+ `fragment_text`（痕跡描述）+ `layer` + `rarity`
+3. `fragment_atmosphere` — 每片碎片 3-5 條；**內容是玩家站在現場外看到/聽到/感覺到的異常，不描述進入後的事**
+4. `fragment_scenes` — 每片碎片**每層恰好 1 個場景**，含 `is_skippable`；場景內容才是進入現場後的遭遇
 5. `scene_options` — is_skippable=false：2-3 正確 + 4-6 錯誤；is_skippable=true：全部 is_correct=true（顯示全部選項）
 
 > ⚠️ 沒有 `fragment_scenes.layer_index >= 1` 記錄的碎片**不會出現在掃描候選清單**中。
@@ -238,15 +255,19 @@ motif_tags TEXT[] DEFAULT '{}', is_user_submitted BOOLEAN DEFAULT false
 ### fragment_atmosphere
 ```sql
 id UUID, story_fragment_id UUID,
-atmosphere_text TEXT      -- 第一人稱，3-5句，只描述異常不說原因
+atmosphere_text TEXT
+-- 玩家站在現場外觀察到的異常，第一人稱，2-3句
+-- 例：「廢棄大樓五樓透著燈光，但這棟樓停電三年了」
+-- 例：「暗巷底部有個身影站著，我等了五分鐘，它一動也不動」
+-- 玩家據此決定要不要深入探查，不描述進入現場後的事
 ```
 
 ### fragment_scenes
 ```sql
 id UUID, story_fragment_id UUID,
-layer_index INTEGER,      -- 1開始
-atmosphere_text TEXT,     -- 場景敘事推進文字（構成 exploration_narrative）
-is_skippable BOOLEAN      -- true=氛圍層選什麼都過；false=有對錯
+layer_index INTEGER,      -- 1開始，每層恰好 1 個場景
+atmosphere_text TEXT,     -- 進入現場後的遭遇敘事（構成 exploration_narrative）
+is_skippable BOOLEAN      -- true=氛圍層選什麼都過（僅 basic）；false=有對錯（lore 全部 false）
 ```
 
 ### scene_options
@@ -272,7 +293,8 @@ capacity INTEGER DEFAULT 15,
 type TEXT DEFAULT 'personal',
 status TEXT DEFAULT 'active',  -- 'active'|'sealed'
 sealed_at TIMESTAMPTZ, story_id UUID,
-sealed_story TEXT              -- 封存後生成的完整故事（sealed_narrative 填入探查敘事）
+sealed_layer TEXT,             -- 'basic'|'lore'
+sealed_story TEXT              -- 封存後生成的完整故事
 ```
 
 ### creature_pages
@@ -284,7 +306,7 @@ obtained_at TIMESTAMPTZ
 
 ## AI 生成故事 SQL 的鐵則
 
-使用 `content-generation-prompt.md` 作為模板（v4）。關鍵規則：
+使用 `content-generation-prompt.md` 作為模板（v5）。關鍵規則：
 
 1. **所有 id 必須是合法 UUID 格式**，每個不同；UUID 只能含 `[0-9a-f]`，`l`、`o`、`g` 等非 hex 字元會導致 INSERT 靜默失敗
 2. **stories.difficulty** 只能填 `'normal'`、`'rare'`、`'legendary'`
@@ -292,9 +314,10 @@ obtained_at TIMESTAMPTZ
 4. **story_fragments.rarity** 只能填 `'common'`、`'rare'`
 5. **story_fragments 不再有 `difficulty` 或 `text` 欄位**，改為 `fragment_label` + `fragment_text`
 6. **fragment_scenes 必須包含 `is_skippable`**（basic 第一層可 true；lore 全部 false）
-7. **sealed_narrative 的 `{佔位符}` 必須和 `fragment_label` 完全一致**
-8. **lore_narrative 是固定文字，不含佔位符**
-9. **單引號用 `''` 跳脫**，不使用反斜線
+7. **fragment_atmosphere 只描述現場外的異常觀察**，不描述進入現場後的事；進入後的遭遇寫在 fragment_scenes
+8. **sealed_narrative 的 `{佔位符}` 必須和 `fragment_label` 完全一致**
+9. **lore_narrative 是固定文字，不含佔位符**
+10. **單引號用 `''` 跳脫**，不使用反斜線
 
 ## 尚未實作
 

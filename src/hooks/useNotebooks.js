@@ -115,6 +115,7 @@ export function useNotebooks(playerId) {
           status: 'sealed', story_id: story.id,
           sealed_at: new Date().toISOString(),
           sealed_story: sealedStory,
+          sealed_layer: layer,
         }).eq('id', notebookId)
 
         await supabase.from('creature_pages').upsert({

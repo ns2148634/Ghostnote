@@ -4,6 +4,7 @@ const LAYER_W = { basic: 'w-7', lore: 'w-14' }
 const LAYER_LABEL = { basic: '基礎版', lore: '鬼怪志版' }
 
 function getLayer(nb) {
+  if (nb.sealed_layer) return nb.sealed_layer
   const hasLore = (nb.fragments || []).some(f => f.sf?.layer === 'lore')
   return hasLore ? 'lore' : 'basic'
 }
