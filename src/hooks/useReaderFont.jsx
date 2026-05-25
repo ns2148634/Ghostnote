@@ -30,13 +30,13 @@ export function FontControls({ idx, onChange }) {
       <button
         onClick={() => onChange(-1)}
         disabled={idx === 0}
-        className="font-mono text-dim hover:text-muted disabled:opacity-20 transition-colors select-none"
+        className="font-mono text-muted hover:text-ink disabled:opacity-30 transition-colors select-none"
         style={{ fontSize: '11px' }}
       >A-</button>
       <button
         onClick={() => onChange(1)}
         disabled={idx === FONT_SIZES.length - 1}
-        className="font-mono text-dim hover:text-muted disabled:opacity-20 transition-colors select-none"
+        className="font-mono text-muted hover:text-ink disabled:opacity-30 transition-colors select-none"
         style={{ fontSize: '15px' }}
       >A+</button>
     </div>
