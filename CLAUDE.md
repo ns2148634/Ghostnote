@@ -110,6 +110,7 @@ current = min(10, stored + floor((now - updated_at) / 8分鐘))
 - 掃描候選清單只含有 `fragment_scenes.layer_index >= 1` 的碎片，確保每個候選碎片都有選擇層
 - `ExplorationOverlay` 的 `layers.length === 0` fallback 為失敗（「氣息已散去」），不給碎片
 - Overlay 用 `fixed inset-0 z-[2000]`（全螢幕暗色）+ 內容 `max-w-[600px] mx-auto`，桌面版文字正確置中；z-2000 確保在手機上不被任何元素壓住
+- 玩家可用右上角 `A-` / `A+` 調整探查文字字體大小（4 個等級：xs/sm/base/lg），存入 `localStorage` key `ghostnote_font_size`，重開維持；文字用 `break-words` + `overflow-y-auto` 確保大字不橫向溢出
 
 地圖頁 UI 層次（由下至上）：
 1. 恐怖 Scanner 背景（`#080604` + CRT scanlines + 5 層雷達環 + 十字準線）
@@ -120,7 +121,7 @@ current = min(10, stored + floor((now - updated_at) / 8分鐘))
 6. 掃描中：三層擴散光環動畫
 
 **已移除 react-leaflet**：改用 `navigator.geolocation.watchPosition`，Map chunk 從 165 kB → 11 kB。
-`toScreen(playerPos, anomaly)` 用 GPS 偏移（約 1 km = ±28%）計算螢幕 % 座標。
+`toScreen(playerPos, anomaly)` 用 GPS 偏移（約 1 km = ±28%）計算螢幕 % 座標，x/y clamp 為 12%–88% 以防止異常點被截到邊緣外。
 
 ### 探查隨機邏輯（新架構，取代固定 exploration_nodes）
 
@@ -128,37 +129,26 @@ current = min(10, stored + floor((now - updated_at) / 8分鐘))
 
 ```javascript
 // 1. 免費氛圍描述：從 fragment_atmosphere 隨機抽一條
-async function getAtmosphere(fragmentId) {
-  const { data } = await supabase
-    .from('fragment_atmosphere')
-    .select('*')
-    .eq('story_fragment_id', fragmentId)
-  return randomPick(data)
+// 2. 每層選擇題：取該層唯一場景，依 is_skippable 決定選項組合
+
+// is_skippable=true（氛圍通過層）：顯示全部選項（都是 is_correct=true），任選都過
+if (scene.is_skippable) {
+  const opts = (allOptions || []).map(o => ({ text: o.text, isCorrect: true, failText: '' }))
+  layers.push({ sceneText: scene.atmosphere_text, options: shuffle(opts) })
 }
-
-// 2. 每層選擇題：從場景池抽場景，再從選項池抽三個
-async function getLayerContent(fragmentId, layerIndex) {
-  const { data: scenes } = await supabase
-    .from('fragment_scenes')
-    .select('*')
-    .eq('story_fragment_id', fragmentId)
-    .eq('layer_index', layerIndex)
-  const scene = randomPick(scenes)
-
-  const { data: allOptions } = await supabase
-    .from('scene_options')
-    .select('*')
-    .eq('scene_id', scene.id)
-
+// is_skippable=false（判斷層）：1 個隨機正確 + 2 個隨機錯誤
+else {
   const correct = randomPick(allOptions.filter(o => o.is_correct))
-  const wrongs = randomPick2(allOptions.filter(o => !o.is_correct))
-  return { scene, options: shuffle([correct, ...wrongs]) }
+  const wrongs = pickN(allOptions.filter(o => !o.is_correct), 2)
+  layers.push({ sceneText, options: shuffle([correct, ...wrongs]) })
 }
 ```
 
 **規則**：
-- 每層必須有一個正確選項出現，其餘兩個從錯誤池隨機抽
-- 三個選項隨機排序，玩家不知道哪個對
+- **每片碎片每層只能有 1 個場景**（若同層有多個場景，隨機 pick 到無選項的場景會使該層被跳過，導致 layers=[] → 失敗）
+- `is_skippable=true` 層顯示所有正確選項（全部 is_correct=true），玩家選任何一個都前進
+- `is_skippable=false` 層顯示 1 正確 + 2 隨機錯誤，選錯直接結束
+- 選項隨機排序，玩家不知道哪個對
 - 選錯任何一層直接結束，異常點已消失（深入探查時就移除了）
 
 > ⚠️ **CTE 遷移陷阱**：PostgreSQL CTE snapshot 機制導致同一語句內 CTE 寫入的列對其他查詢不可見，必須透過 `RETURNING` 引用。每個場景必須用獨立的 CTE 寫法：
@@ -179,15 +169,13 @@ async function getLayerContent(fragmentId, layerIndex) {
 
 ### 鬼怪等級與探查層數
 
-> ⚠️ **資料庫實際 constraint 值**，與下方顯示名稱的對應關係：
+| stories.difficulty | 基礎版碎片 | 鬼怪志碎片 | 探查層數 |
+|-------------------|-----------|-----------|---------|
+| `normal`          | 4-6 片    | +2-3 片   | 3 層    |
+| `rare`            | 7-9 片    | +4-5 片   | 4 層    |
+| `legendary`       | 10-13 片  | +5-6 片   | 5 層    |
 
-| 顯示名稱 | stories.difficulty | story_fragments.difficulty | 基礎版碎片 | 鬼怪志碎片 | 探查層數 |
-|---------|-------------------|--------------------------|-----------|-----------|---------|
-| 入門（beginner） | `beginner` | `normal` | 4-6 片 | +3-4 片 | 3 層 |
-| 中級（intermediate） | `intermediate` | `normal` | 7-9 片 | +4-5 片 | 4 層 |
-| 高級（advanced） | `advanced` | `hard` | 10-13 片 | +5-6 片 | 5 層 |
-
-探查層數由 `stories.difficulty` 決定，`ExplorationOverlay` 依此決定要走幾層。
+> ⚠️ 探查層數由 `fragment_scenes.layer_index` 的實際數量決定（目前固定 3 層）。`ExplorationOverlay` 依 `stories.difficulty` 決定要走幾層尚未實作，見「尚未實作」節。
 
 ### Auth 流程
 
@@ -218,10 +206,11 @@ async function getLayerContent(fragmentId, layerIndex) {
 1. `stories` — 含 `sealed_narrative`（基礎版骨架，`{fragment_label}` 佔位符）和 `lore_narrative`（鬼怪志固定文字）
 2. `story_fragments` — 含 `fragment_label`（痕跡標籤）+ `fragment_text`（痕跡描述）+ `rarity`（common/rare）
 3. `fragment_atmosphere` — 每片碎片 3-5 條氛圍描述
-4. `fragment_scenes` — 每片碎片每層 3-5 個場景，含 `is_skippable`（basic 第一層可為 true）
-5. `scene_options` — is_skippable=false：2-3 正確 + 4-6 錯誤；is_skippable=true：全部 is_correct=true
+4. `fragment_scenes` — 每片碎片**每層恰好 1 個場景**，含 `is_skippable`（basic 第一層可為 true；lore 全部 false）
+5. `scene_options` — is_skippable=false：2-3 正確 + 4-6 錯誤；is_skippable=true：全部 is_correct=true（顯示全部選項）
 
 > ⚠️ 沒有 `fragment_scenes.layer_index >= 1` 記錄的碎片**不會出現在掃描候選清單**中。
+> ⚠️ 同一層若有多個場景，隨機 pick 到無選項的場景會使該層被跳過（`correct` undefined → `continue`），最終 `layers=[]` 導致探查永遠失敗。**每層固定 1 個場景。**
 
 ## 資料庫 Schema（關鍵表格）
 
@@ -297,7 +286,7 @@ obtained_at TIMESTAMPTZ
 
 使用 `content-generation-prompt.md` 作為模板（v4）。關鍵規則：
 
-1. **所有 id 必須是合法 UUID 格式**，每個不同
+1. **所有 id 必須是合法 UUID 格式**，每個不同；UUID 只能含 `[0-9a-f]`，`l`、`o`、`g` 等非 hex 字元會導致 INSERT 靜默失敗
 2. **stories.difficulty** 只能填 `'normal'`、`'rare'`、`'legendary'`
 3. **story_fragments.layer** 只能填 `'basic'`、`'lore'`
 4. **story_fragments.rarity** 只能填 `'common'`、`'rare'`
