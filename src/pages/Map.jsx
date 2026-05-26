@@ -112,6 +112,16 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
     const atmRow = randomPick(atmospheres || [])
     const atmosphereText = atmRow?.atmosphere_text || '這裡有什麼不尋常。'
 
+    // Batch-fetch all options for all scenes in one query
+    const sceneIds = (scenes || []).map(s => s.id)
+    const { data: allOptionsRaw } = sceneIds.length
+      ? await supabase.from('scene_options').select('*').in('scene_id', sceneIds)
+      : { data: [] }
+    const optsByScene = {}
+    for (const o of allOptionsRaw || []) {
+      ;(optsByScene[o.scene_id] ||= []).push(o)
+    }
+
     const layerIndices = [...new Set((scenes || []).map(s => s.layer_index))].sort()
     const layers = []
     for (const idx of layerIndices) {
@@ -119,18 +129,15 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
       const scene = randomPick(pool)
       if (!scene) continue
 
-      const { data: allOptions } = await supabase
-        .from('scene_options')
-        .select('*')
-        .eq('scene_id', scene.id)
+      const allOptions = optsByScene[scene.id] || []
 
       if (scene.is_skippable) {
-        const opts = (allOptions || []).map(o => ({ text: o.text, isCorrect: true, failText: '' }))
+        const opts = allOptions.map(o => ({ text: o.text, isCorrect: true, failText: '' }))
         if (opts.length === 0) continue
         layers.push({ sceneText: scene.atmosphere_text, options: shuffle(opts) })
       } else {
-        const correct = randomPick((allOptions || []).filter(o => o.is_correct))
-        const wrongs = pickN((allOptions || []).filter(o => !o.is_correct), 2)
+        const correct = randomPick(allOptions.filter(o => o.is_correct))
+        const wrongs = pickN(allOptions.filter(o => !o.is_correct), 2)
         if (!correct) continue
         layers.push({
           sceneText: scene.atmosphere_text,
