@@ -324,9 +324,20 @@ obtained_at TIMESTAMPTZ
 5. **story_fragments 不再有 `difficulty` 或 `text` 欄位**，改為 `fragment_label` + `fragment_text`
 6. **fragment_scenes 必須包含 `is_skippable`**（basic 第一層可 true；lore 全部 false）
 7. **fragment_atmosphere 只描述現場外的異常觀察**，不描述進入現場後的事；進入後的遭遇寫在 fragment_scenes
-8. **sealed_narrative 的 `{佔位符}` 必須和 `fragment_label` 完全一致**
-9. **lore_narrative 是固定文字，不含佔位符**
-10. **單引號用 `''` 跳脫**，不使用反斜線
+8. **stories 必須包含 `image_slug`**，填入鬼怪圖片短名（英文小寫+底線，不含副檔名）；圖片放 `public/creatures/{image_slug}.webp`
+9. **sealed_narrative 的 `{佔位符}` 必須和 `fragment_label` 完全一致**
+10. **lore_narrative 是固定文字，不含佔位符**
+11. **單引號用 `''` 跳脫**，不使用反斜線
+
+### 已知鬼怪 image_slug 對照
+| 鬼怪 | image_slug |
+|------|-----------|
+| 屍鼠 | shushi |
+| 廁所花子 | hanako |
+| 新娘電梯 | elevator_bride |
+| 隔壁的鄰居 | neighbor |
+| 三樓的轉學生 | transfer_student |
+| 夜班的那個人 | night_shift |
 
 ## 尚未實作
 
