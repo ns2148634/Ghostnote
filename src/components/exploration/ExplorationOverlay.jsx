@@ -95,7 +95,7 @@ export default function ExplorationOverlay({
     <div className="fixed inset-0 bg-[#0d0d0d] z-[2000] flex flex-col fade-in">
 
       {/* Font size controls */}
-      <div className="absolute top-3 right-3 z-10">
+      <div className="absolute right-3 z-10" style={{ top: 'max(0.75rem, env(safe-area-inset-top))' }}>
         <FontControls idx={fontIdx} onChange={changeFont} />
       </div>
 
