@@ -238,8 +238,17 @@ difficulty TEXT,          -- 'normal'|'rare'|'legendary'
 creature_type TEXT,
 creature_description TEXT,
 sealed_narrative TEXT,    -- 基礎版故事骨架，含 {fragment_label} 佔位符
-lore_narrative TEXT       -- 鬼怪志版固定故事（樣貌、起源、能力）
+lore_narrative TEXT,      -- 鬼怪志版固定故事（樣貌、起源、能力）
+image_slug TEXT           -- 鬼怪圖片短名，對應 public/creatures/{image_slug}.webp
 ```
+
+### 鬼怪圖片規格
+- 位置：`public/creatures/{image_slug}.webp`
+- 尺寸：600 × 800 px（直式）
+- 格式：WebP，< 120 KB
+- 畫風：水墨插畫風，深黑背景（#080604），灰白冷光主體 + 暖金線條，帶汙漬老化感
+- basic 層顯示時加深色遮罩（opacity-50 + 黑色 40% overlay）；lore 層較清晰（opacity-90）
+- 底部漸層淡出至 `#1e1e1e`（card 背景色），自然融入內容
 
 ### story_fragments
 ```sql

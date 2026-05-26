@@ -62,6 +62,23 @@ function SealedModal({ notebook, onClose }) {
             <button onClick={onClose} className="font-mono text-dim text-lg hover:text-muted transition-colors leading-none">✕</button>
           </div>
         </div>
+        {/* Creature image */}
+        {notebook.story?.image_slug && (
+          <div className="relative w-full overflow-hidden" style={{ height: '220px' }}>
+            <img
+              src={`/creatures/${notebook.story.image_slug}.webp`}
+              alt={notebook.story.title}
+              className={`w-full h-full object-cover object-top transition-opacity ${layer === 'lore' ? 'opacity-90' : 'opacity-50'}`}
+              onError={e => { e.currentTarget.parentElement.style.display = 'none' }}
+            />
+            <div className="absolute inset-0 pointer-events-none"
+                 style={{ background: 'linear-gradient(to bottom, transparent 25%, #1e1e1e 100%)' }} />
+            {layer === 'basic' && (
+              <div className="absolute inset-0 pointer-events-none bg-black/40" />
+            )}
+          </div>
+        )}
+
         {/* Sealed story or fragment list */}
         <div className="px-5 py-4 flex flex-col gap-3">
           {notebook.sealed_story ? (
