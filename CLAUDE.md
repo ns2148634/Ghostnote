@@ -112,7 +112,7 @@ current = min(10, stored + floor((now - updated_at) / 8分鐘))
   ※ 玩家據此判斷要不要深入探查，不描述進入現場後的事
 → 深入探查（-1體力）→ 異常點立即消失 → 進入場景選擇題（才是現場遭遇）
 → 多層選擇題 → 成功/失敗
-→ 成功：NotebookSelectModal 選擇目標筆記本 → 放入碎片（一次探索只得一個碎片）
+→ 成功：FragmentReveal 過渡畫面（約 3.5s）→ NotebookSelectModal 選擇目標筆記本 → 放入碎片（一次探索只得一個碎片）
 ```
 
 **關鍵設計決策**：
@@ -120,6 +120,7 @@ current = min(10, stored + floor((now - updated_at) / 8分鐘))
 - 掃描候選清單只含有 `fragment_scenes.layer_index >= 1` 的碎片，確保每個候選碎片都有選擇層
 - `ExplorationOverlay` 的 `layers.length === 0` fallback 為失敗（「氣息已散去」），不給碎片
 - Overlay 用 `fixed inset-0 z-[2000]`（全螢幕暗色）+ 內容 `max-w-[600px] mx-auto`，桌面版文字正確置中；z-2000 確保在手機上不被任何元素壓住
+- **FragmentReveal**（`z-[2100]`）：最後一層答對後顯示的過渡畫面。黑底 `#080604`，依 rarity/layer 顯示不同顏色的 fragment_label 打字機效果（common=#c8c0b8、rare=#b8c8e0、lore=#c8a84a），lore 碎片在中途額外暫停 600ms；打字完成後字跡抖動（opacity 1→0.3→1，80ms），再 +300ms 顯示 fragment_text，+1200ms 後進入 NotebookSelectModal
 - 玩家可用右上角 `A-` / `A+` 調整探查文字字體大小（4 個等級：xs/sm/base/lg），存入 `localStorage` key `ghostnote_font_size`，重開維持；文字用 `break-words` + `overflow-y-auto` 確保大字不橫向溢出
 
 地圖頁 UI 層次（由下至上）：
