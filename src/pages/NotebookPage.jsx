@@ -5,53 +5,67 @@ import { useReaderFont, FontControls } from '../hooks/useReaderFont'
 function FragmentCard({ frag, onTagChange, onDelete, onMoveClick, sealed, textCls = 'text-xs leading-6' }) {
   const [editingTag, setEditingTag] = useState(false)
   const [tagVal, setTagVal] = useState(frag.player_tag || '')
+  const [expanded, setExpanded] = useState(false)
 
   function submitTag() {
     onTagChange(frag.id, tagVal.trim())
     setEditingTag(false)
   }
 
+  const label = frag.sf?.fragment_label || '（碎片）'
+
   return (
-    <div className="border border-border p-4 bg-[#111] relative group">
-      {frag.player_tag && !editingTag && (
-        <span className="absolute top-2 right-2 font-mono text-[9px] text-accent/70 bg-dim/30 px-1.5 py-0.5 border border-dim/40">
-          {frag.player_tag}
-        </span>
-      )}
-      {frag.sf?.fragment_label && (
-        <p className="font-mono text-accent/80 text-[10px] tracking-wider mb-1.5">
-          {frag.sf.fragment_label}
-        </p>
-      )}
-      <p className={`font-mono text-muted ${textCls} pr-12 whitespace-pre-line break-words`}>
-        {frag.exploration_narrative || frag.sf?.fragment_text || '（碎片文字遺失）'}
-      </p>
-      {!sealed && (
-        <div className="flex gap-4 mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
-          {editingTag ? (
-            <div className="flex gap-2 items-center">
-              <input
-                className="bg-surface border border-border font-mono text-[10px] text-ink px-2 py-0.5 w-28 outline-none focus:border-muted"
-                value={tagVal}
-                onChange={e => setTagVal(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') submitTag() }}
-                maxLength={12}
-                autoFocus
-              />
-              <button onClick={submitTag} className="font-mono text-accent text-[10px]">確定</button>
-              <button onClick={() => setEditingTag(false)} className="font-mono text-dim text-[10px]">取消</button>
+    <div className="border border-border bg-[#111]">
+      {/* Header — always visible, toggle on click */}
+      <button
+        className="w-full px-4 py-3 flex items-center justify-between text-left"
+        onClick={() => setExpanded(e => !e)}
+      >
+        <span className="font-mono text-accent/90 text-[11px] tracking-wider">{label}</span>
+        <div className="flex items-center gap-2 shrink-0 ml-2">
+          {frag.player_tag && (
+            <span className="font-mono text-[9px] text-accent/60 bg-dim/30 px-1.5 py-0.5 border border-dim/40">
+              {frag.player_tag}
+            </span>
+          )}
+          <span className="font-mono text-dim text-[9px]">{expanded ? '▲' : '▼'}</span>
+        </div>
+      </button>
+
+      {/* Expanded content */}
+      {expanded && (
+        <div className="px-4 pb-4 group">
+          <p className={`font-mono text-muted ${textCls} whitespace-pre-line break-words`}>
+            {frag.exploration_narrative || frag.sf?.fragment_text || '（碎片文字遺失）'}
+          </p>
+          {!sealed && (
+            <div className="flex gap-4 mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
+              {editingTag ? (
+                <div className="flex gap-2 items-center">
+                  <input
+                    className="bg-surface border border-border font-mono text-[10px] text-ink px-2 py-0.5 w-28 outline-none focus:border-muted"
+                    value={tagVal}
+                    onChange={e => setTagVal(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') submitTag() }}
+                    maxLength={12}
+                    autoFocus
+                  />
+                  <button onClick={submitTag} className="font-mono text-accent text-[10px]">確定</button>
+                  <button onClick={() => setEditingTag(false)} className="font-mono text-dim text-[10px]">取消</button>
+                </div>
+              ) : (
+                <>
+                  <button onClick={() => setEditingTag(true)}
+                    className="font-mono text-dim text-[10px] hover:text-muted transition-colors">
+                    {frag.player_tag ? '改標籤' : '+ 標籤'}
+                  </button>
+                  <button onClick={() => onMoveClick(frag)}
+                    className="font-mono text-dim text-[10px] hover:text-muted transition-colors">移動</button>
+                  <button onClick={() => onDelete(frag.id)}
+                    className="font-mono text-dim text-[10px] hover:text-danger transition-colors">刪除</button>
+                </>
+              )}
             </div>
-          ) : (
-            <>
-              <button onClick={() => setEditingTag(true)}
-                className="font-mono text-dim text-[10px] hover:text-muted transition-colors">
-                {frag.player_tag ? '改標籤' : '+ 標籤'}
-              </button>
-              <button onClick={() => onMoveClick(frag)}
-                className="font-mono text-dim text-[10px] hover:text-muted transition-colors">移動</button>
-              <button onClick={() => onDelete(frag.id)}
-                className="font-mono text-dim text-[10px] hover:text-danger transition-colors">刪除</button>
-            </>
           )}
         </div>
       )}

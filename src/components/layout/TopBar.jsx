@@ -19,7 +19,7 @@ export default function TopBar({ player, stamina, maxStamina, sealedCount = 0 })
     <div className="bg-bg border-b border-border px-4 py-3 flex items-center justify-between shrink-0">
       <div className="flex items-center gap-3 min-w-0">
         <span className="font-mono text-ink text-sm truncate">{player.display_name}</span>
-        <span className="font-mono text-dim text-xs shrink-0">{getLevel(sealedCount)}</span>
+        <span className="font-mono text-muted text-xs shrink-0">{getLevel(sealedCount)}</span>
       </div>
       <StaminaBar current={stamina} max={maxStamina} />
     </div>

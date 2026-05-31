@@ -19,7 +19,7 @@ export default function BottomNav() {
           to={to}
           className={({ isActive }) =>
             `flex-1 flex flex-col items-center py-4 gap-1.5 font-mono text-xs tracking-widest transition-colors
-             ${isActive ? 'text-accent' : 'text-dim hover:text-muted'}`
+             ${isActive ? 'text-accent' : 'text-muted hover:text-ink'}`
           }
         >
           <span className="text-base leading-none">{icon}</span>

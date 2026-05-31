@@ -53,7 +53,7 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
     return () => clearInterval(id)
   }, [scanning, anomalies.length])
 
-  function jitter(max = 0.009) { return (Math.random() - 0.5) * 2 * max }
+  function jitter(max = 0.005) { return (Math.random() - 0.5) * 2 * max }
 
   function randomPick(arr) { return arr[Math.floor(Math.random() * arr.length)] }
   function pickN(arr, n) {
