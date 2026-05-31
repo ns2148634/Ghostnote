@@ -7,6 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: null,
       includeAssets: ['favicon.ico', 'icons/*.png'],
       manifest: {
         name: '靈異筆記',
