@@ -10,7 +10,7 @@ GDD 完整文件：`paranormal-notebook-gdd.md`
 
 ## 技術棧
 
-- **前端**：React 18 + Vite + vite-plugin-pwa（PWA）
+- **前端**：React 18 + Vite + vite-plugin-pwa（PWA，`injectRegister: null`，改用 `main.jsx` 手動 `registerSW` 並加 `onRegisterError` 靜默捕捉 WebView 的 InvalidStateError）
 - **樣式**：Tailwind CSS（深色靈異主題）
 - **定位**：瀏覽器 Geolocation API（`navigator.geolocation.watchPosition`，不使用 Leaflet）
 - **後端**：Supabase（PostgreSQL + Auth + RLS + Realtime）
