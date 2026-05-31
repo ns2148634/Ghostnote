@@ -1,6 +1,92 @@
 import { useState, useEffect, useRef } from 'react'
 import { useReaderFont, FontControls, FONT_SIZES } from '../../hooks/useReaderFont'
 
+function FragmentReveal({ fragment, onDone }) {
+  const [wrapOpacity, setWrapOpacity]   = useState(0)
+  const [typedLabel, setTypedLabel]     = useState('')
+  const [labelDone, setLabelDone]       = useState(false)
+  const [labelFlicker, setLabelFlicker] = useState(false)
+  const [textVisible, setTextVisible]   = useState(false)
+  const cancelled = useRef(false)
+
+  const layer     = fragment?.layer   || 'basic'
+  const rarity    = fragment?.rarity  || 'common'
+  const fullLabel = fragment?.fragment_label || ''
+  const fullText  = fragment?.fragment_text  || ''
+  const labelColor = layer === 'lore'    ? '#c8a84a'
+                   : rarity === 'rare'   ? '#b8c8e0'
+                   : '#c8c0b8'
+
+  useEffect(() => {
+    cancelled.current = false
+    const guard = (fn) => () => { if (!cancelled.current) fn() }
+
+    // Phase 1: fade in overlay
+    const t1 = setTimeout(guard(() => setWrapOpacity(1)), 20)
+
+    // Phase 2: typewriter starts at 400ms
+    let idx = 0
+    function tick() {
+      if (cancelled.current) return
+      if (idx >= fullLabel.length) {
+        setLabelDone(true)
+        // Flicker: 1 → 0.3 → 1, 80ms each step
+        setTimeout(guard(() => setLabelFlicker(true)),  0)
+        setTimeout(guard(() => setLabelFlicker(false)), 80)
+        // Phase 3: text fadeIn at +300ms, onDone at +1500ms
+        setTimeout(guard(() => setTextVisible(true)), 300)
+        setTimeout(guard(() => onDone?.()),           1500)
+        return
+      }
+      idx++
+      setTypedLabel(fullLabel.slice(0, idx))
+      const isLore = layer === 'lore'
+      let delay = 80 + Math.random() * 140          // 80–220ms
+      if (isLore) delay = 100 + Math.random() * 200 // 100–300ms for lore
+      if (isLore && idx === Math.floor(fullLabel.length / 2)) delay += 600
+      setTimeout(tick, delay)
+    }
+    const t2 = setTimeout(tick, 400)
+
+    return () => {
+      cancelled.current = true
+      clearTimeout(t1)
+      clearTimeout(t2)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div
+      className="fixed inset-0 z-[2100] flex items-center justify-center"
+      style={{ background: '#080604', opacity: wrapOpacity, transition: 'opacity 0.4s ease-in' }}
+    >
+      <div className="flex flex-col items-center gap-6 px-10 w-full max-w-[600px] mx-auto">
+        <p
+          className="font-mono text-2xl font-medium tracking-widest text-center"
+          style={{
+            color: labelColor,
+            opacity: labelFlicker ? 0.3 : 1,
+            transition: 'opacity 80ms',
+          }}
+        >
+          {typedLabel}
+          {!labelDone && <span className="cursor">▌</span>}
+        </p>
+        <p
+          className="font-mono text-sm text-center"
+          style={{
+            color: '#6a6460',
+            opacity: textVisible ? 1 : 0,
+            transition: 'opacity 0.8s ease-in',
+          }}
+        >
+          {fullText}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function TypewriterText({ text, speed = 35, onDone }) {
   const [displayed, setDisplayed] = useState('')
 
@@ -92,6 +178,7 @@ export default function ExplorationOverlay({
   const textCls = `${fontCls} ${leadingCls}`
 
   return (
+    <>
     <div className="fixed inset-0 bg-[#0d0d0d] z-[2000] flex flex-col fade-in">
 
       {/* Font size controls */}
@@ -165,29 +252,7 @@ export default function ExplorationOverlay({
             </>
           )}
 
-          {/* Success */}
-          {phase === 'success' && (
-            <div className="fade-in flex flex-col gap-6">
-              <p className="font-mono text-muted text-xs tracking-widest">── 碎片 ──</p>
-              {fragment && (
-                <div className="border border-dim p-5 bg-[#111]">
-                  <p className="font-mono text-accent text-[11px] tracking-wider mb-2">
-                    {fragment.fragment_label}
-                  </p>
-                  <p className={`font-mono text-muted ${textCls} break-words`}>
-                    {fragment.fragment_text}
-                  </p>
-                </div>
-              )}
-              <button
-                onClick={() => onSuccess(fragment, narrativeRef.current.join('\n'))}
-                className="font-mono text-accent text-xs tracking-widest hover:text-ink transition-colors
-                           underline underline-offset-4 decoration-dim self-start"
-              >
-                收入筆記本
-              </button>
-            </div>
-          )}
+          {/* Success phase — handled by FragmentReveal overlay below */}
 
         </div>
       </div>
@@ -203,5 +268,14 @@ export default function ExplorationOverlay({
         </div>
       )}
     </div>
+
+    {/* Fragment reveal transition — appears on top when last layer answered correctly */}
+    {phase === 'success' && (
+      <FragmentReveal
+        fragment={fragment}
+        onDone={() => onSuccess(fragment, narrativeRef.current.join('\n'))}
+      />
+    )}
+    </>
   )
 }
