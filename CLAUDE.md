@@ -65,7 +65,7 @@ src/
     ├── Auth.jsx        登入（Google OAuth + Email OTP 兩步驟）
     ├── SetupName.jsx   首次登入設定調查員名稱（一次性）
     ├── Map.jsx         地圖探查主頁
-    ├── NotebookPage.jsx 筆記本管理
+    ├── NotebookPage.jsx 筆記本管理（FragmentCard 預設折疊，點擊展開完整敘事）
     ├── BookshelfPage.jsx 封存書架
     └── ShopPage.jsx    協會（玩家資訊、補給站、帳號管理）
 ```
@@ -76,6 +76,7 @@ src/
 - **基礎字體**：`body font-size: 15px`；標籤用 `text-xs`(12px)，內文用 `text-sm`(14px)
 - **Safe area**：`#root` 有 `padding-top: env(safe-area-inset-top)` 適配瀏海/動態島；BottomNav 有 `padding-bottom: env(safe-area-inset-bottom)` 適配 Home Bar
 - **動畫原則**：極少、極慢；禁止彈跳；只用 fadeIn / pulse / typewriter
+- **導航列配色**：BottomNav 未選中 `text-muted`，hover `text-ink`，選中 `text-accent`；TopBar 等級標籤 `text-muted`；體力空格 `muted/40`
 
 ## 核心機制說明
 
@@ -131,6 +132,7 @@ current = min(10, stored + floor((now - updated_at) / 8分鐘))
 
 **已移除 react-leaflet**：改用 `navigator.geolocation.watchPosition`，Map chunk 從 165 kB → 11 kB。
 `toScreen(playerPos, anomaly)` 用 GPS 偏移（約 1 km = ±28%）計算螢幕 % 座標，x/y clamp 為 12%–88% 以防止異常點被截到邊緣外。
+掃描隨機偏移（`jitter`）：`±0.005°`（≈ ±550 m），異常點產生在玩家周圍約 550m 半徑內。
 
 ### 探查隨機邏輯（新架構，取代固定 exploration_nodes）
 
