@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useReaderFont, FontControls } from '../../hooks/useReaderFont'
-import { loadInvestigation, applyChoice, buildNarrative } from '../../lib/exploration'
+import { loadInvestigation, applyChoice, getEnding, buildNarrative } from '../../lib/exploration'
 
 const CLARITY_MAX = 5
 
@@ -125,23 +125,30 @@ export default function ExplorationOverlay({
   const [clarity, setClarity]           = useState(3)
   const [done, setDone]                 = useState(false)
   const [busy, setBusy]                 = useState(false)
-  const [resultText, setResultText]     = useState('')
+  const [resultText, setResultText]         = useState('')
   const [pendingOutcome, setPendingOutcome] = useState(null)
+  const [tier, setTier]                     = useState(null)
   const walkedRef = useRef([])
   const { fontCls, leadingCls, idx: fontIdx, change: changeFont } = useReaderFont()
   const textCls = `${fontCls} ${leadingCls}`
 
+  // Compute ending text for 'fragment' outcome (depends on tier + last layer)
+  const endingText = (pendingOutcome === 'fragment' && tier && layers[layerIdx])
+    ? getEnding(layers[layerIdx], tier)
+    : ''
+  const displayText = [resultText, endingText].filter(Boolean).join('\n\n')
+
   // Auto-advance from 'result' phase
   useEffect(() => {
     if (phase !== 'result' || !pendingOutcome) return
-    const delay = pendingOutcome === 'faded' ? 2500 : resultText ? 1800 : 400
+    const delay = pendingOutcome === 'faded' ? 2500 : displayText ? 2500 : 400
     const t = setTimeout(() => {
       if      (pendingOutcome === 'faded')    setPhase('faded')
       else if (pendingOutcome === 'fragment') setPhase('success')
       else { setLayerIdx(i => i + 1); setDone(false); setPhase('scene') }
     }, delay)
     return () => clearTimeout(t)
-  }, [phase, pendingOutcome, resultText])
+  }, [phase, pendingOutcome, displayText])
 
   async function handleDeepen() {
     setBusy(true)
@@ -165,10 +172,11 @@ export default function ExplorationOverlay({
   }
 
   function handleChoice(opt) {
-    walkedRef.current = [...walkedRef.current, layers[layerIdx].sceneText]
     const r = applyChoice({ clarity, layerIndex: layerIdx, totalLayers: layers.length }, opt)
+    walkedRef.current = [...walkedRef.current, { sceneText: layers[layerIdx].sceneText, resultText: r.resultText }]
     setClarity(r.clarity)
     setResultText(r.resultText)
+    setTier(r.tier ?? null)
     setPendingOutcome(r.outcome)
     setPhase('result')
   }
@@ -244,10 +252,10 @@ export default function ExplorationOverlay({
             </>
           )}
 
-          {/* Result (brief feedback, auto-advances) */}
+          {/* Result (brief feedback + optional ending, auto-advances) */}
           {phase === 'result' && (
-            resultText
-              ? <p className={`font-mono text-muted ${textCls} whitespace-pre-line break-words fade-in`}>{resultText}</p>
+            displayText
+              ? <p className={`font-mono text-muted ${textCls} whitespace-pre-line break-words fade-in`}>{displayText}</p>
               : <p className="font-mono text-dim text-xs text-center animate-pulse">...</p>
           )}
 

@@ -1,41 +1,41 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { supabase } from '../lib/supabase'
 import { getWeatherCondition, getTimeCondition, getDateCondition } from '../lib/weather'
+import { getAvailableSignals, fetchOwnedFragmentIds } from '../lib/signals'
 import ExplorationOverlay from '../components/exploration/ExplorationOverlay'
 import NotebookSelectModal from '../components/exploration/NotebookSelectModal'
 
 const TIME_LABELS    = { dawn: '清晨', day: '白天', dusk: '黃昏', night: '深夜' }
 const WEATHER_LABELS = { clear: '晴', cloudy: '陰', fog: '霧', rain: '雨' }
-const IDLE_MSGS = ['靜候訊號', '頻帶寂靜', '等待感應', '無異常訊號']
-const SNAP_PCT  = 9  // % — signal starts to glow
-const LOCK_PCT  = 4  // % — considered "locked on"
+const IDLE_MSGS      = ['靜候訊號', '頻帶寂靜', '等待感應', '無異常訊號']
+const SNAP_PCT = 9   // % — starts glowing
+const LOCK_PCT = 4   // % — considered "on signal"
 const FREQ_LABELS = [88, 92, 96, 100, 104, 108]
 
-// Deterministic position from fragment id (5–93%)
-function fragPos(id) {
-  const num = parseInt(id.replace(/-/g, '').slice(0, 8), 16)
-  return 5 + (num % 88)
-}
-
 export default function MapPage({ player, notebooks, stamina, consume, addFragment }) {
-  const [signals, setSignals]     = useState([])
-  const [usedIds, setUsedIds]     = useState(new Set())
-  const [loading, setLoading]     = useState(true)
-  const [env, setEnv]             = useState({ time: '', weather: '', date: null })
-  const [pos, setPos]             = useState(null)
-  const [needlePos, setNeedlePos] = useState(15)
-  const [lockedAtm, setLockedAtm] = useState(null)
-  const [overlay, setOverlay]     = useState(null)
-  const [noStamina, setNoStamina] = useState(false)
-  const [pending, setPending]     = useState(null)
-  const [idleMsg, setIdleMsg]     = useState(IDLE_MSGS[0])
+  const [signals, setSignals]       = useState([])
+  const [usedIds, setUsedIds]       = useState(new Set())
+  const [loading, setLoading]       = useState(true)
+  const [env, setEnv]               = useState({ time: '', weather: '', date: null })
+  const [pos, setPos]               = useState(null)
+  const [needlePos, setNeedlePos]   = useState(15)
+  const [isHolding, setIsHolding]   = useState(false)
+  const [lockedAtm, setLockedAtm]   = useState(null)
+  const [overlay, setOverlay]       = useState(null)
+  const [noStamina, setNoStamina]   = useState(false)
+  const [pending, setPending]       = useState(null)
+  const [idleMsg, setIdleMsg]       = useState(IDLE_MSGS[0])
 
-  const bandRef    = useRef(null)
-  const dragging   = useRef(false)
-  const envRef     = useRef(env)
-  useEffect(() => { envRef.current = env }, [env])
+  const bandRef       = useRef(null)
+  const dragging      = useRef(false)
+  const envRef        = useRef(env)
+  const playerIdRef   = useRef(player?.id)
+  const needlePosRef  = useRef(needlePos)
+  const nearestRef    = useRef(null)
+  useEffect(() => { envRef.current = env },           [env])
+  useEffect(() => { playerIdRef.current = player?.id }, [player?.id])
+  useEffect(() => { needlePosRef.current = needlePos }, [needlePos])
 
-  // ── Init: GPS → env → signals ────────────────────────────────────────────
+  // ── Init ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!navigator.geolocation) { initEnv(null); return }
     navigator.geolocation.getCurrentPosition(
@@ -51,56 +51,25 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
     const weather = coords ? await getWeatherCondition(coords.lat, coords.lng) : 'clear'
     const e = { time, weather, date }
     setEnv(e)
-    await fetchSignals(time, weather, date)
+    await loadSignals(e)
   }
 
-  async function fetchSignals(time, weather, date) {
+  async function loadSignals(e) {
     setLoading(true)
     setUsedIds(new Set())
-
-    // 1. Fragment IDs that have at least one scene
-    const { data: sceneRows } = await supabase
-      .from('fragment_scenes').select('story_fragment_id').gte('layer_index', 1)
-    const eligibleIds = [...new Set((sceneRows || []).map(r => r.story_fragment_id))]
-    if (!eligibleIds.length) { setSignals([]); setLoading(false); return }
-
-    // 2. Load fragments + client-side env filter
-    const { data: frags } = await supabase
-      .from('story_fragments')
-      .select('id, layer, rarity, fragment_label, fragment_text, time_condition, weather_condition, date_condition')
-      .in('id', eligibleIds)
-
-    const filtered = (frags || []).filter(f => {
-      if (f.time_condition    && f.time_condition    !== time)    return false
-      if (f.weather_condition && f.weather_condition !== weather) return false
-      if (f.date_condition    && f.date_condition    !== date)    return false
-      return true
-    })
-    if (!filtered.length) { setSignals([]); setLoading(false); return }
-
-    // 3. Atmospheres
-    const { data: atms } = await supabase
-      .from('fragment_atmosphere').select('*')
-      .in('story_fragment_id', filtered.map(f => f.id))
-    const atmByFrag = {}
-    for (const a of atms || []) (atmByFrag[a.story_fragment_id] ||= []).push(a)
-
-    setSignals(filtered.map(f => ({
-      id: f.id,
-      fragment: f,
-      position: fragPos(f.id),
-      atmospheres: atmByFrag[f.id] || [],
-    })))
+    setIsHolding(false)
+    const ownedIds = await fetchOwnedFragmentIds(playerIdRef.current)
+    const sigs = await getAvailableSignals(e, { playerId: playerIdRef.current, ownedIds })
+    setSignals(sigs)
     setLoading(false)
   }
 
-  // ── Active signals (minus used) ──────────────────────────────────────────
+  // ── Derived ───────────────────────────────────────────────────────────────
   const activeSignals = useMemo(
     () => signals.filter(s => !usedIds.has(s.id)),
     [signals, usedIds]
   )
 
-  // ── Nearest / locked signal ──────────────────────────────────────────────
   const nearestSignal = useMemo(() => {
     let best = null, bestDist = Infinity
     for (const s of activeSignals) {
@@ -110,9 +79,20 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
     return best
   }, [needlePos, activeSignals])
 
-  const isLocked = !!nearestSignal && Math.abs(needlePos - nearestSignal.position) < LOCK_PCT
+  // Keep ref in sync for use in pointer handlers
+  useEffect(() => { nearestRef.current = nearestSignal }, [nearestSignal])
 
-  // Pick atmosphere text once when locked signal changes
+  // isLocked: user released in lock zone AND needle still there
+  const isLocked = isHolding && !!nearestSignal && Math.abs(needlePos - nearestSignal.position) < LOCK_PCT
+
+  // Cancel hold if needle drifts out of lock zone (e.g. signals reload)
+  useEffect(() => {
+    if (isHolding && (!nearestSignal || Math.abs(needlePos - nearestSignal.position) >= LOCK_PCT)) {
+      setIsHolding(false)
+    }
+  }, [isHolding, needlePos, nearestSignal])
+
+  // Pick atmosphere once when locked signal changes
   useEffect(() => {
     if (!isLocked || !nearestSignal) { setLockedAtm(null); return }
     const atms = nearestSignal.atmospheres
@@ -123,7 +103,7 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
     )
   }, [isLocked, nearestSignal?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Idle message cycle ───────────────────────────────────────────────────
+  // Idle message cycle
   useEffect(() => {
     if (isLocked || overlay || nearestSignal || loading) return
     let i = 0
@@ -131,22 +111,32 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
     return () => clearInterval(t)
   }, [isLocked, overlay, nearestSignal, loading])
 
-  // ── Band drag ────────────────────────────────────────────────────────────
+  // ── Band drag + hold-to-lock ──────────────────────────────────────────────
   function posFromEvent(e) {
     const rect = bandRef.current?.getBoundingClientRect()
-    if (!rect) return needlePos
+    if (!rect) return needlePosRef.current
     return Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100))
   }
   function onBandDown(e) {
     e.preventDefault()
     dragging.current = true
+    setIsHolding(false)
     bandRef.current?.setPointerCapture(e.pointerId)
     setNeedlePos(posFromEvent(e))
   }
-  function onBandMove(e) { if (dragging.current) setNeedlePos(posFromEvent(e)) }
-  function onBandUp()    { dragging.current = false }
+  function onBandMove(e) {
+    if (!dragging.current) return
+    setIsHolding(false)
+    setNeedlePos(posFromEvent(e))
+  }
+  function onBandUp() {
+    dragging.current = false
+    const near = nearestRef.current
+    const pos  = needlePosRef.current
+    if (near && Math.abs(pos - near.position) < LOCK_PCT) setIsHolding(true)
+  }
 
-  // ── Actions ──────────────────────────────────────────────────────────────
+  // ── Actions ───────────────────────────────────────────────────────────────
   function handleEnterOverlay() {
     if (!isLocked || !nearestSignal) return
     setOverlay({ signalId: nearestSignal.id, atmosphereText: lockedAtm || '', fragment: nearestSignal.fragment })
@@ -158,6 +148,7 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
     const ok = await consume(1)
     if (!ok) { setNoStamina(true); return false }
     if (overlay?.signalId) setUsedIds(prev => new Set([...prev, overlay.signalId]))
+    setIsHolding(false)
     return true
   }
 
@@ -165,8 +156,7 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
     if (stamina < 1 || loading) return
     const ok = await consume(1)
     if (!ok) return
-    const { time, weather, date } = envRef.current
-    await fetchSignals(time, weather, date)
+    await loadSignals(envRef.current)
   }
 
   function handleSuccess(frag, narrative) {
@@ -180,17 +170,17 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
     setPending(null)
   }
 
-  // ── Derived display ──────────────────────────────────────────────────────
-  const statusText = loading          ? '感應中...'
-    : isLocked                        ? '— 訊號定位 —'
-    : nearestSignal                   ? '調頻中...'
-    : activeSignals.length === 0      ? '此刻無訊號'
+  // ── Status text ───────────────────────────────────────────────────────────
+  const statusText = loading                     ? '感應中...'
+    : isLocked                                   ? '— 訊號定位 —'
+    : nearestSignal                              ? '調頻中...'
+    : activeSignals.length === 0                 ? '此刻無訊號'
     : idleMsg
 
   const timeLabel    = TIME_LABELS[env.time]       || ''
   const weatherLabel = WEATHER_LABELS[env.weather] || ''
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex-1 relative overflow-hidden flex flex-col" style={{ background: '#080604' }}>
 
@@ -219,7 +209,7 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
         )}
       </div>
 
-      {/* ── Centre area: atmosphere / idle ── */}
+      {/* ── Centre: atmosphere / idle ── */}
       <div className="flex-1 flex flex-col items-center justify-center relative z-10 px-8 gap-6">
         {isLocked && lockedAtm ? (
           <>
@@ -264,7 +254,7 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
           {activeSignals.map(s => {
             const dist   = Math.abs(needlePos - s.position)
             const near   = dist < SNAP_PCT
-            const locked = dist < LOCK_PCT
+            const locked = dist < LOCK_PCT && isHolding
             return (
               <div key={s.id} className="absolute top-1.5 bottom-1.5 pointer-events-none"
                 style={{
@@ -282,21 +272,16 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
           {/* Needle */}
           <div className="absolute top-0 bottom-0 pointer-events-none"
             style={{
-              left: `${needlePos}%`,
-              width: 1,
-              transform: 'translateX(-50%)',
-              background: '#c9b99a',
-              boxShadow: '0 0 6px 2px rgba(201,185,154,0.45)',
+              left: `${needlePos}%`, width: 1, transform: 'translateX(-50%)',
+              background: '#c9b99a', boxShadow: '0 0 6px 2px rgba(201,185,154,0.45)',
             }}
           />
-          {/* Needle tip triangle */}
+          {/* Needle tip */}
           <div className="absolute bottom-0 pointer-events-none"
             style={{
-              left: `${needlePos}%`,
-              transform: 'translateX(-50%)',
+              left: `${needlePos}%`, transform: 'translateX(-50%)',
               width: 0, height: 0,
-              borderLeft: '4px solid transparent',
-              borderRight: '4px solid transparent',
+              borderLeft: '4px solid transparent', borderRight: '4px solid transparent',
               borderBottom: '5px solid rgba(201,185,154,0.6)',
             }}
           />
@@ -325,7 +310,7 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
         </button>
       </div>
 
-      {/* ── Exploration overlay ── */}
+      {/* ── Overlay ── */}
       {overlay && (
         <ExplorationOverlay
           atmosphereText={overlay.atmosphereText}
