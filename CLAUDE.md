@@ -1,241 +1,348 @@
-﻿# ?蝑? ??CLAUDE.md
+# 靈異筆記 — CLAUDE.md
 
-## 撠?璁膩
+## 專案概述
 
-?函??撣隤芣??PWA ???摰嗥???唳?單??矽?餅??交迨?啁??啣虜閮???狩?芰?銝??楚蝣?????摮?閫??擛潭芰?閮??
-蝣??舐摰嗉扛頨怨粥??鈭?臬?撣嗅?靘????挾?摰嗅??剖撠暸蝡?曉嚗?單??舀??歇蝬?雿??摰扎??勗耦???具矽?脖??賣??亦??餅挾?極?瘀????舫?蝡臬誨?准?銝???隞仿?銝???鈭楝敺?敺??拙振???嗅???斗?芯?蝣?撅祆???狩?迎?皝?敺?摮?
-**???**嚗矽?餅??交瘞??亙嚗??舫??嚗?甇???拇??函????蝑??砍?摮??園?擛潭迎???亦?撠撐???芥????啣漲???瑟??格??舀????駁狩????朣?摮?擛潭芸???
-?Ｘ瘝??迤蝣箇?獢?銝甇仿?蔣?輯????啣漲嚗??嚗????嗡?????蝚砍??瘀???閮?撠望敺蝣?嚗?閮????撠梁征??
-GDD 摰?辣嚗paranormal-notebook-gdd.md`
+推理型都市傳說收藏 PWA 手遊。玩家用「靈異收音機」調頻感知此地的異常訊號、收集鬼怪留下的痕跡碎片、組合封存，解鎖鬼怪筆記本。
 
-## ?銵ㄖ
+碎片是玩家親身走過敘事場景後帶回來的文字片段。玩家從頭到尾都站在現場，收音機是把「已經和你共處一室、但隱形的存在」調進你能感知的頻段的工具，而不是遠端廣播。同一片碎片可以透過不同的敘事路徑取得，玩家靠記憶和感知判斷哪些碎片屬於同一個鬼怪，湊齊後封存。
 
-- **?垢**嚗eact 18 + Vite + vite-plugin-pwa嚗WA嚗injectRegister: null`嚗??`main.jsx` ?? `registerSW` 銝血? `onRegisterError` ???? WebView ??InvalidStateError嚗?- **璅??**嚗ailwind CSS嚗楛?脤??唬蜓憿?
-- **摰?**嚗汗??Geolocation API嚗navigator.geolocation`嚗?雿輻 Leaflet嚗?*GPS ?芰靘?瑞憓?蝝?*嚗?颲堆?憭拇除嚗??伐?嚗????雿?銋??箸?啣虜暺漣璅?- **敺垢**嚗upabase嚗ostgreSQL + Auth + RLS + Realtime嚗?- **憭拇除**嚗pen-Meteo嚗?鞎鳴??⊿? key嚗?- **?函蔡**嚗ercel + GitHub Actions CI/CD
+**遊戲重心**：調頻感知是氛圍入口（不是難關）；真正的玩法在碎片收集與筆記本封存（收集鬼怪）。探查的小張力來自「訊號清晰度」，長期目標是把同一隻鬼的碎片湊齊、封存成鬼怪志。
 
-## ?祆??
+探查沒有「正確答案」。每一步選擇影響訊號清晰度（訊號格），靠讀當下的氛圍憑第六感判斷，撐住訊號就拿得到碎片，讓訊號散掉就空手。
+
+GDD 完整文件：`paranormal-notebook-gdd.md`
+
+## 技術棧
+
+- **前端**：React 18 + Vite + vite-plugin-pwa（PWA，`injectRegister: null`，改用 `main.jsx` 手動 `registerSW` 並加 `onRegisterError` 靜默捕捉 WebView 的 InvalidStateError）
+- **樣式**：Tailwind CSS（深色靈異主題）
+- **定位**：瀏覽器 Geolocation API（`navigator.geolocation`，不使用 Leaflet）。**GPS 只用來判斷環境因素**（時辰／天氣／節日），不做地圖定位，也不擺放異常點座標。
+- **後端**：Supabase（PostgreSQL + Auth + RLS + Realtime）
+- **天氣**：Open-Meteo（免費，無需 key）
+- **部署**：Vercel + GitHub Actions CI/CD
+
+## 本機開發
 
 ```bash
-cp .env.example .env   # 憛怠 Supabase URL嚗??怨楝敺???anon key
+cp .env.example .env   # 填入 Supabase URL（不含路徑）和 anon key
 npm install
 npm run dev
 ```
 
-## ?啣?霈
+## 環境變數
 
-| 霈 | 隤芣? | 瘜冽? |
+| 變數 | 說明 | 注意 |
 |------|------|------|
-| `VITE_SUPABASE_URL` | Supabase 撠? URL | ?芸‵ `https://xxx.supabase.co`嚗?*銝?** `/rest/v1/` |
+| `VITE_SUPABASE_URL` | Supabase 專案 URL | 只填 `https://xxx.supabase.co`，**不加** `/rest/v1/` |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon public key | |
 
-## 鞈?摨?
-?瑞宏瑼???`supabase/migrations/`嚗?摨 Supabase SQL Editor ?瑁?嚗?- `001_schema.sql` ????”?澆?蝢?+ RLS ?輻?
-- `002_seed.sql` ???? seed嚗歇??004 ?誨嚗???瑁?嚗?- `003_scene_pool.sql` ???湔瘙??”??+ RLS
-- `004_schema_v2.sql` ??Schema v2嚗??方?鞈???雿矽?氬?曌???seed
-- `005_signal_clarity.sql` ??**?Ｘ?寧?**嚗scene_options` ??`is_correct`/`fail_text` ?寧 `signal_delta`/`result_text`嚗蒂摰頧??暹?鞈?
-- `006_tiered_ending.sql` ??**?惜蝯?**嚗fragment_scenes` ??`ending_high`/`ending_low`嚗??敺?撅文‵?潘?
+## 資料庫
 
-## Supabase Auth 閮剖?
+遷移檔案在 `supabase/migrations/`，依序在 Supabase SQL Editor 執行：
+- `001_schema.sql` — 所有表格定義 + RLS 政策
+- `002_seed.sql` — 舊版 seed（已由 004 取代，勿重複執行）
+- `003_scene_pool.sql` — 場景池三個表格 + RLS
+- `004_schema_v2.sql` — Schema v2：清除舊資料、欄位調整、屍鼠完整 seed
+- `005_signal_clarity.sql` — **探查改版**：`scene_options` 由 `is_correct`/`fail_text` 改為 `signal_delta`/`result_text`，並安全轉換現有資料
+- `006_tiered_ending.sql` — **分層結局**：`fragment_scenes` 加 `ending_high`/`ending_low`（只有最後一層填值）
 
-- **Email OTP**嚗uthentication ??Providers ??Email ?
-- **Google OAuth**嚗uthentication ??Providers ??Google ?嚗‵??Client ID / Secret
-  - Google Cloud Console ???redirect URI嚗https://xxx.supabase.co/auth/v1/callback`
+## Supabase Auth 設定
 
-## ?桅?蝯?
+- **Email OTP**：Authentication → Providers → Email 啟用
+- **Google OAuth**：Authentication → Providers → Google 啟用，填入 Client ID / Secret
+  - Google Cloud Console 需加 redirect URI：`https://xxx.supabase.co/auth/v1/callback`
+
+## 目錄結構
 
 ```
 src/
-??? components/
-??  ??? exploration/   ?Ｘ瘚? UI嚗xplorationOverlay?otebookSelectModal?ragmentReveal嚗???  ??? layout/        TopBar?ottomNav
-??  ??? ui/            Modal?taminaBar嚗???璇?閬甈⊥??撖虫???
-??? hooks/
-??  ??? usePlayer.js   ?拙振鞈?嚗etch/create on login嚗 isNew ??嚗???  ??? useStamina.js  ??閮?嚗??榆嚗敺垢??嚗???  ??? useNotebooks.js 蝑???+ 蝣? CRUD + 撠??摩
-??? lib/
-??  ??? supabase.js     Supabase client
-??  ??? weather.js      Open-Meteo + ?劓/蝭?亙?瘀?隤輸閮??瘝?隞嗡?皞?
-??  ??? signals.js      閮??舐?改?瘥頛芣 + 璇辣??嚗捱摰迨?餉矽?餉?隤堆?閬?嚗???  ??? exploration.js  ?Ｘ?摩嚗??亙惜??賊??敞?????蝞?撅斤?撅
-??? pages/
-    ??? Auth.jsx        ?餃嚗oogle OAuth + Email OTP ?拇郊撽?
-    ??? SetupName.jsx   擐活?餃閮剖?隤踵?∪?蝔梧?銝甈⊥改?
-    ??? Map.jsx         ?銝駁?嚗?單?隤輸?歹????瑼??怎? Map.jsx嚗?    ??? NotebookPage.jsx 蝑??祉恣??FragmentCard ?身??嚗??????湔?鈭?
-    ??? BookshelfPage.jsx 撠??豢
-    ??? ShopPage.jsx    ??嚗摰嗉?閮?蝯衣??董?恣??
+├── components/
+│   ├── exploration/   探查流程 UI（ExplorationOverlay、NotebookSelectModal、FragmentReveal）
+│   ├── layout/        TopBar、BottomNav
+│   └── ui/            Modal、StaminaBar（靈力條，DB 欄位 stamina 暫留）
+├── hooks/
+│   ├── usePlayer.js   玩家資料（fetch/create on login，含 isNew 旗標）
+│   ├── useStamina.js  靈力計算（時間差，無後端排程）
+│   └── useNotebooks.js 筆記本 + 碎片 CRUD + 封存邏輯
+├── lib/
+│   ├── supabase.js     Supabase client
+│   ├── weather.js      Open-Meteo + 時辰/節日判斷（調頻訊號的出沒條件來源）
+│   ├── signals.js      訊號可用性：每日輪替 + 條件加權，決定此刻調頻能掃到誰
+│   └── exploration.js  探查邏輯：載入層、抽選項、累加訊號格、結算、分層結局
+└── pages/
+    ├── Auth.jsx        登入（Google OAuth + Email OTP 兩步驟）
+    ├── SetupName.jsx   首次登入設定調查員名稱（一次性）
+    ├── Map.jsx         感知主頁（收音機調頻盤，非地圖；檔名暫留 Map.jsx）
+    ├── NotebookPage.jsx 筆記本管理（FragmentCard 預設折疊，點擊展開完整敘事）
+    ├── BookshelfPage.jsx 封存書架
+    └── ShopPage.jsx    協會（玩家資訊、補給站、帳號管理）
 ```
 
-## UI 閮剛???
+## UI 設計原則
 
-- **???芸?**嚗#root` `max-width: 600px` 撅葉嚗width: 100%` 蝣箔????典祝嚗???撟單?拙憛?`#000` 蝝?
-- **?箇?摮?**嚗body font-size: 15px`嚗?蝐斤 `text-xs`(12px)嚗? `text-sm`(14px)
-- **Safe area**嚗#root` ??`padding-top: env(safe-area-inset-top)` ?拚??絲/??撜塚?BottomNav ??`padding-bottom: env(safe-area-inset-bottom)` ?拚? Home Bar
-- **???**嚗扔撠扔?ｇ?蝳迫敶歲嚗??fadeIn / pulse / typewriter
-- **撠????*嚗ottomNav ?芷銝?`text-muted`嚗over `text-ink`嚗銝?`text-accent`嚗opBar 蝑?璅惜 `text-muted`嚗??征??`muted/40`
-- **?銝駁???*嚗楛暺? `#080604`????`#c9b99a`?RT scanlines??賢??
-## ?詨?璈隤芣?
+- **手機優先**：`#root` `max-width: 600px` 居中，`width: 100%` 確保手機全寬；桌面/平板兩側填 `#000` 純黑
+- **基礎字體**：`body font-size: 15px`；標籤用 `text-xs`(12px)，內文用 `text-sm`(14px)
+- **Safe area**：`#root` 有 `padding-top: env(safe-area-inset-top)` 適配瀏海/動態島；BottomNav 有 `padding-bottom: env(safe-area-inset-bottom)` 適配 Home Bar
+- **動畫原則**：極少、極慢；禁止彈跳；只用 fadeIn / pulse / typewriter
+- **導航列配色**：BottomNav 未選中 `text-muted`，hover `text-ink`，選中 `text-accent`；TopBar 等級標籤 `text-muted`；靈力空格 `muted/40`
+- **靈異主題色**：深黑底 `#080604`、暖金 `#c9b99a`、CRT scanlines、灰白冷光
 
-### ??閮?嚗seStamina.js嚗?
-???誨??擃?嚗??嗡?霈?蝝?蝡舀??榆嚗?頝?蝡舀?蝔?
+## 核心機制說明
+
+### 靈力計算（useStamina.js）
+
+靈力取代舊的體力，機制不變，純前端時間差，不跑後端排程：
 ```
-current = min(10, stored + floor((now - updated_at) / 8??))
+current = min(10, stored + floor((now - updated_at) / 8分鐘))
 ```
-瘨???recovered ????????湔 `stamina` + `stamina_updated_at`嚗B 甈????stamina嚗I 憿舐內?箝?????
-**瘨???*嚗?甈⊥?亙?函摰嗆???瘛勗????**1 ??*???矽?餌????雿?摰????祥瘞?嚗?典?鞎颯?撅斗??亦??豢?銋????
-### 隤輸?支???Map.jsx嚗?
-?園璈矽?餅?臭????亙????誨???琿?????雿???*隤輸?舀????撘?銝???嚗??航憭望???*
+消耗時把 recovered 先加回再扣，更新 `stamina` + `stamina_updated_at`（欄位名暫留 stamina，UI 顯示為「靈力」）。
 
-鈭?閮剛?嚗?- **?恍**嚗楛暺? + CRT scanlines嚗?璇偌撟喲撣嗚??孵?????凝撘望郭敶ｇ??垢憿舐內?啣?嚗?颲?+ 憭拇除 + 蝭?伐???GPS 摨扳?嚗?隤踹嚗?- **敺?**嚗璇撣嗆???郭敶Ｘ?撟單????芸?嗚?- **??嚗???嚗?鞎鳴?**嚗餈????梯?暺?嚗?閮??郭敶Ｚ???蝮瑟芋蝟犖???桅皛脣????撖???擖???靘?餈?頝???銝摰敺嚗???葫??????祝摨艾?銝?撠??蝝?- **??嚗?雿??祥嚗?*嚗閮?銝?雿? 1??.5s嚗???Ｙ帘摰?瘜Ｗ耦?香嚗fragment_atmosphere` 隞交?摮???瘚桃????憭芣?暸? ??皛?????瘞???脤蝛拐???湔挾???敹?- **?仿?**嚗＊蝷箸???餈????拙振?詻?瘛勗???? ??嚗脣?撅斗??? ???- **銝甈∩?????*嚗粥摰??ａ? ???餃葆?飛??????銝准閮??典???????隤輸??- **蝛箏**嚗憓???仿?閮????湔??餃葆?賣??嚗＊蝷箝???摰?嚗???暻潭??鈭??脩蔑嚗???????- **?芸???嚗?賂?**嚗?１?啗????蝯血?嚗?摰?璅??????- **閬死銝???*嚗矽?餅??閮撥摨佗???交????嚗??憟?UI 隤?嚗?璅????瘜Ｗ耦嚗?
-### 閮??箸?閬????亥憚?選?signals.js嚗?
-瘙箏??迨?餉矽?餉?隤啜??誨?撣賊?撖漲?ODO??*?函?銝?蝘餃?**嚗PS ?芰?潛憓?
-- **瘥頛芣**嚗?嗅予?交??嗥車摮?憒?`YYYY-MM-DD` hash嚗?瘙箏?隞予?芸嗾?駁狩?函?銝???游予?箏?嚗??拙振摮詨???憭拇?隤啜??予???嫘?- **璇辣??**嚗摰嗥銝??劓/憭拇除/蝭?伐?weather.js嚗撠?`story_fragments` ??`time_condition` / `weather_condition` / `date_condition`??隞嗅??閮?瘚桃璈?擃??撘瘀?銝??撘望?銝?整?- **??**嚗摰嗆敺閬???暹憡璇臬停?券憭??乓???閬?擛潭????閬??唳?啜?銝蝝璈?銋??韏啣隞颱??圈???- **銝?撉?*嚗?銝?啣?銝?????孵嚗??reroll ?瑞???嚗?銝餃????孵???唳??乓?嚗?1 ??嚗銝閰脣????嗉祥??雿???- **嚗?貉?憌橘?**嚗?摰?憿舐內?????芣?蝝?400 ?砍偕??憿??嫣?/頝????瘞?嚗?閬??拙振????嚗祕?捱摰隤啁?隞??/璇辣??
-### ?Ｘ?摩嚗ib/exploration.js嚗????啣漲璅∪?嚗?
-`scene_options` 銝????荔??寧瘥?葆銝??`signal_delta`嚗??憓?嚗芋蝯撘?
+**消耗規則**：一次探查只在玩家按〔通靈深入〕時扣 **1 格**。轉動調頻盤搜尋、對準訊號、看免費氛圍，全部免費。多層感知的選擇也不扣。
+
+### 封存判斷（useNotebooks.js `seal()`）
+
+1. 取出筆記本內所有碎片的 `story_fragment_id`
+2. 逐一比對所有故事的兩個層次（basic / lore）
+3. 若筆記本碎片完整包含某層次所有必要碎片 → 成功，解鎖 `creature_pages`，贈一本空白筆記本
+4. 失敗回饋三種文案：
+   - 碎片不足：「還有什麼沒被記下來」
+   - 有異鬼怪碎片：「這裡裝了不該裝的東西」
+   - 數量符合但組合錯：「似乎已經完整了，但有什麼不對」
+
+**基礎版封存**：集齊所有 `layer='basic'` 碎片 → 玩家探查敘事填入 `sealed_narrative` 骨架 → 生成「調查員的目擊側寫」，每個玩家版本不同
+
+**鬼怪志版封存**：集齊所有 `layer='basic'` + `layer='lore'` 碎片 → 直接存入 `lore_narrative` 固定文字 → 生成「鬼怪的完整檔案」（樣貌、起源、能力），固定內容
+
+### 調頻盤互動（Map.jsx）
+
+收音機調頻是唯一的感知入口。**調頻是氛圍與儀式，不是難關，不可能失敗。**
+
+- **畫面**：深黑底 + CRT scanlines；一條水平頻帶、一根可拖指針、頂端顯示環境（時辰 + 天氣 + 節日）與 GPS 座標（純調味）。
+- **搜尋（拖指針，免費）**：接近訊號隱藏點時雜訊變薄、波形聚攏。訊號有「吸附寬度」，靠近即高亮，不需對到像素級。SNAP 9% / LOCK 4%。
+- **鎖定（放開指針，免費）**：在 LOCK zone 內放開 → `isHolding=true` → `fragment_atmosphere` 以打字機逐字浮現；再次拖動取消鎖定。
+- **接通後**：顯示氛圍描述 → 玩家選〔通靈深入〕(−1 靈力，進多層感知) 或放掉。
+- **空台**：環境無可用訊號時，整條頻帶都是雜訊，顯示「此刻無異常訊號，換個時間再來」。
+- **重新感知（可選）**：−1 靈力，清空 usedIds 並重新呼叫 `getAvailableSignals`。
+
+### 訊號出沒規律（signals.js）
+
+決定「此刻調頻能掃到誰」。**全程不需移動**，GPS 只用於環境條件。
+
+- **每日輪替**：用當天日期當種子（`YYYY-M-D` hash），從所有有場景的碎片中選出 `DAILY_ROSTER_SIZE=6` 隻鬼作為今日名單（硬門檻）。一整天固定，隔天換一批。
+- **條件加權**：`time_condition` / `weather_condition` / `date_condition` 對上當前環境，吻合 ×3、NULL（無條件）×1、不吻合 ×0.25。三個乘起來決定最終 `weight`。
+- **已持有降權**：玩家已持有該碎片的任意一份 → 再乘以 `OWNED_FACTOR=0.15`，讓玩家不會一直撞到同一片。
+- **穩定性**：同一（日期 + 環境）重掃是同一批候選（不 reroll）；〔重新感知〕才換一批（唯一對搜尋收費的動作）。
+- **`fragPos(id)`**：以 fragment.id 的前 8 位 hex hash 決定訊號在頻帶上的固定位置（5–93%），穩定不變。
+
+### 感知 / 調頻流程（Map.jsx + ExplorationOverlay.jsx）
+
+```
+轉動調頻盤搜尋（免費）
+  ※ 環境（時辰/天氣/節日，來自 weather.js）決定此刻頻帶上有哪些訊號
+  ※ 訊號 = 候選碎片，由 story_fragments 的條件對上目前環境篩出
+→ 對準某個訊號（免費）→ 顯示氛圍描述（從 fragment_atmosphere 隨機抽）
+  ※ 氛圍是玩家站在現場感知到的異常（看到/聽到/感覺到），不描述進入後的事
+→ 玩家選擇：放掉（之後再找）或〔通靈深入〕(−1 靈力)
+→ 通靈深入 → 進入多層感知（才是現場遭遇）
+→ 每層：一個場景 + 抽 3 個選項 → 選擇 → 顯示 result_text + 調整訊號格
+→ 結算：
+   訊號格歸 0 → 存在散去（失敗，空手）
+   撐到最後一層且格數 ≥ 1 → FragmentReveal 過渡（約 3.5s）→ NotebookSelectModal → 放入碎片
+```
+
+**關鍵設計決策**：
+- 探查邏輯全部集中在 `lib/exploration.js`，ExplorationOverlay 只負責驅動與顯示（見下節）
+- 沒有「事後 25% 什麼都沒有」的 RNG，風險全在訊號格
+- 沒有收手鍵（成本是單筆固定一格，沒有越陷越深的問題）；可選擇保留純敘事的「停止」鈕，但不存不扣任何東西
+- `loadInvestigation` 回傳 `layers.length === 0` 時當失敗處理（內容缺場景/選項），不給碎片
+- Overlay 用 `fixed inset-0 z-[2000]`（全螢幕暗色）+ 內容 `max-w-[600px] mx-auto`，桌面版文字正確置中；z-2000 確保手機上不被任何元素壓住
+- **FragmentReveal**（`z-[2100]`）：撐到最後一層成功後顯示的過渡畫面。黑底 `#080604`，依 rarity/layer 顯示不同顏色的 fragment_label 打字機效果（common=#c8c0b8、rare=#b8c8e0、lore=#c8a84a），lore 碎片中途額外暫停 600ms；打字完成後字跡抖動（opacity 1→0.3→1，80ms），再 +300ms 顯示 fragment_text，+1200ms 後進入 NotebookSelectModal
+- 玩家可用右上角 `A-` / `A+` 調整探查文字字體大小（4 級：xs/sm/base/lg），存 `localStorage` key `ghostnote_font_size`；文字用 `break-words` + `overflow-y-auto` 確保大字不橫向溢出
+
+### 探查邏輯（lib/exploration.js，訊號清晰度模型）
+
+`scene_options` 不再有對錯，改為每個選項帶一個 `signal_delta`（訊號格增減）。模組提供三個函式：
 
 ```javascript
 import { loadInvestigation, applyChoice, getEnding, buildNarrative } from '../lib/exploration'
 
-// ??瘛勗??頛銝甈⊥?亦???惜
+// 通靈深入時：載入一次探查的所有層
 const inv = await loadInvestigation(fragment) // { startClarity, layers: [...] }
 let clarity = inv.startClarity
 let i = 0
 const walked = []
 
-// ?拙振暺?撅斗??賊?嚗?const r = applyChoice(
+// 玩家點某層某選項：
+const r = applyChoice(
   { clarity, layerIndex: i, totalLayers: inv.layers.length },
   option
 )
 clarity = r.clarity
 walked.push({ sceneText: inv.layers[i].sceneText, resultText: r.resultText })
-// 憿舐內 r.resultText + ?湔閮??澆???if (r.outcome === 'faded')    { /* 摮???恍 */ }
+// 顯示 r.resultText + 更新訊號格動畫
+if (r.outcome === 'faded')    { /* 存在散去畫面 */ }
 if (r.outcome === 'fragment') {
-  const ending = getEnding(inv.layers[i], r.tier) // ?惜蝯??嗅偏??
-  /* 憿舐內 ending ??FragmentReveal ??NotebookSelectModal嚗? buildNarrative(walked) */
+  const ending = getEnding(inv.layers[i], r.tier) // 分層結局收尾文字
+  /* 顯示 ending → FragmentReveal → NotebookSelectModal，存 buildNarrative(walked) */
 }
-if (r.outcome === 'continue') { i++ /* 憿舐內銝?撅?*/ }
+if (r.outcome === 'continue') { i++ /* 顯示下一層 */ }
 ```
 
-**閮??潘?皜摨佗?閬?**嚗?
-- **蝭?** 0??嚗lamp嚗?頞? `CLARITY_MAX`嚗?雿 0嚗?- **韏瑕??潭** 靘???layer嚗START_CLARITY = { basic: 3, lore: 2 }`
-- **撅斗** ??`fragment_scenes` ??`layer_index` 撖阡??賊?瘙箏?嚗摰嫣? normal=3?are=4?egendary=5嚗?- **瘥??signal_delta** ?芣??車?潘?`+1 / 0 / ?? / ??`嚗??撠迂嚗?憟?+1嚗?撌???嚗捆????嚗?- **瘥惜??3 ???*嚗?瑕惜靽??撠?1 ??delta ??0嚗暑頝荔?+ ?喳? 1 ??delta < 0嚗甇伐????園??冽?嚗璈?摨?- **蝯?銝??*嚗continue`嚗?銝撅歹??faded`嚗?豢飛 0嚗??冽?鳴??fragment`嚗??唳?敺?撅支? ??嚗faded` ?芸???敺?撅日?唳飛 0 銋??嚗??舀?啁???- **瘥活?Ｘ?蔭**嚗?訾?頝函??敞蝛?
-**?惜蝯?嚗2嚗?*嚗?
-- ?敺?撅斗???嚗??拚??潭憿舐內銝??嗅偏??嚗tier='high'`嚗 `HIGH_TIER_MIN`=4 ?潘?銋暹楊?仿?/ `tier='low'`嚗??? ?潘?撌桅??瑞?嚗?- `applyChoice` ??`outcome==='fragment'` ????`tier`嚗getEnding(lastLayer, tier)` ????摮?靘?敺?撅斤? `ending_high` / `ending_low`嚗?- **蝣??祈澈??tier ?⊿?**嚗igh/low ?踹?????函???惜?芣?銝?交撠暹???銝潛摰嗉蕭擃?嚗??雿???雿?蝒??摰寧撩 ending 甈???`getEnding` ??`''`嚗I ??嗅偏?喳??
-**is_skippable ??儔**嚗府撅斗????`signal_delta` ?賣 0嚗?瘞??芷嚗???賂??asic 蝣?蝚?1 撅文閮?true嚗?*lore 蝣???惜敹? false**??
-> ?對? `loadInvestigation` ??閰脣惜???賊???胯??隞亙雿踹?撅斗憭?臭?銝?憯?靽格?鈭??璈?啁?賊??湔撠望?仃???瘀??閬敺?GDD ????湔瘙??脰?蝑?嚗??湔憭??湔?喳??
-### ? / ?Ｘ摰瘚?
+**訊號格（清晰度）規則**：
 
-```
-頧?隤輸?斗?撠??祥嚗?  ??signals.js嚗??亥憚??+ ?啣?璇辣??嚗捱摰撣嗡??鈭??????????????祥嚗? fragment_atmosphere ??瘚桃
-  ??瘞??舐摰嗥??函?湔??亙?撣賂??/?賢/?死?堆?嚗??膩?脣敺?鈭????拙振?豢?嚗???隤輸嚗???瘛勗???? ??)
-????瘛勗 ???脣憭惜?嚗??舐?湧??
-??瘥惜嚗????+ ??3 ??????豢? ??憿舐內 result_text + 隤踵閮?????蝯?嚗?   閮??潭飛 0 ??摮??嚗仃??蝛箸?嚗?   ??敺?撅支??潭 ??1 ??getEnding ?嗅偏 ??FragmentReveal ??NotebookSelectModal ???曉蝣?
-```
+- **範圍** 0–5，clamp（不超過 `CLARITY_MAX`，不低於 0）
+- **起始格數** 依碎片 layer：`START_CLARITY = { basic: 3, lore: 2 }`
+- **層數** 由 `fragment_scenes` 的 `layer_index` 實際數量決定（內容上 normal=3、rare=4、legendary=5）
+- **每個選項 signal_delta** 只有四種值：`+1 / 0 / −1 / −2`（刻意不對稱：最好 +1，最差 −2，容易斷、難回升）
+- **每層抽 3 個選項**：判斷層保證「至少 1 個 delta ≥ 0（活路）+ 至少 1 個 delta < 0（錯步）」，其餘隨機，隨機排序
+- **結算三出口**：`continue`（下一層）、`faded`（格數歸 0，存在散去）、`fragment`（撐到最後一層且 ≥1）。`faded` 優先——最後一層選到歸 0 也是散去，不是拿到碎片
+- **每次探查重置**，格數不跨碎片累積
 
-**Overlay / ?腹?銵敦蝭**嚗?- Overlay ??`fixed inset-0 z-[2000]`嚗?Ｗ??嚗? ?批捆 `max-w-[600px] mx-auto`
-- **FragmentReveal**嚗z-[2100]`嚗???敺?皜～?摨?`#080604`嚗? rarity 憿舐內銝?憿??fragment_label ??璈???common=#c8c0b8?are=#b8c8e0?ore=#c8a84a嚗?lore 銝剝?憭??600ms嚗?摰?頝⊥???opacity 1??.3??嚗?0ms嚗?+300ms 憿舐內 fragment_text嚗?1200ms ?脣 NotebookSelectModal
-- ?喃?閫?`A-` / `A+` 隤踵?交?摮?蝝?4 蝝?xs/sm/base/lg嚗?摮?`localStorage` key `ghostnote_font_size`嚗?摮?`break-words` + `overflow-y-auto`
+**分層結局（v2）**：
 
-### 撠??斗嚗seNotebooks.js `seal()`嚗?
-1. ?蝑??砍????? `story_fragment_id`
-2. ??瘥????鈭??拙惜甈∴?basic / lore嚗?3. ?亦?閮蝣?摰??惜甈⊥???閬???????嚗圾??`creature_pages`嚗?銝?祉征?賜?閮
-4. 憭望???銝車??嚗???頞喉??怎擛潭芰????賊?蝚血?雿??
+- 最後一層成功後，依剩餘格數顯示不同收尾：`tier='high'`（≥ `HIGH_TIER_MIN=4` 格，乾淨接通）/ `tier='low'`（1–3 格，差點斷線）。
+- `applyChoice` 在 `outcome==='fragment'` 時回傳 `tier`；`getEnding(lastLayer, tier)` 取對應的 `ending_high` / `ending_low` 文字。
+- **碎片本身與 tier 無關**，high/low 拿到的碎片完全相同；分層只換一句收尾氛圍。內容缺 ending 欄位時 `getEnding` 回 `''`，UI 省略。
 
-**?箇???摮?*嚗?朣???`layer='basic'` 蝣? ???拙振?Ｘ??憛怠 `sealed_narrative` 撉冽 ???矽?亙??撖怒?瘥犖?銝?
-**擛潭芸???摮?*嚗?朣???`basic` + `lore` 蝣? ??摮 `lore_narrative` ?箏??? ???狩?芰?摰瑼???
-### 擛潭芰?蝝??Ｘ撅斗
+**is_skippable 的新意義**：該層所有選項 `signal_delta` 都是 0（純氛圍鋪陳，不動格數）。basic 碎片第 1 層可設 true；**lore 碎片所有層必須 false**。
 
-| difficulty | ?箇?????| 擛潭芸?蝣? | ?Ｘ撅斗 | 韏瑕?閮??潘?靘???layer嚗?|
-|-----------|-----------|-----------|---------|--------------------------|
-| `normal`  | 4-6 ??   | +2-3 ??  | 3 撅?   | basic 3 / lore 2 |
-| `rare`    | 7-9 ??   | +4-5 ??  | 4 撅?   | basic 3 / lore 2 |
-| `legendary` | 10-13 ??| +5-6 ??  | 5 撅?   | basic 3 / lore 2 |
+> ℹ️ `loadInvestigation` 會挑該層「有選項的場景」，所以即使同層放多個場景也不會壞（修掉了舊版隨機抽到無選項場景就整個失敗的雷）。若要恢復 GDD 原本的多場景池（防記答案），直接多加場景即可。
 
-撅斗頞?頞嚗?????游?撅支??瑞?嚗??湔摨衣蝣? layer 瘙箏?嚗ore 韏瑕??澆???撅日?臬?瑕惜嚗?
-### 蝣???
+### 鬼怪等級與探查層數
 
-| layer | rarity | 隤芣? | ?Ｘ擃? | 撠??券?|
+| stories.difficulty | 基礎版碎片 | 鬼怪志碎片 | 探查層數 | 起始訊號格（依碎片 layer） |
+|-------------------|-----------|-----------|---------|--------------------------|
+| `normal`          | 4-6 片    | +2-3 片   | 3 層    | basic 3 / lore 2 |
+| `rare`            | 7-9 片    | +4-5 片   | 4 層    | basic 3 / lore 2 |
+| `legendary`       | 10-13 片  | +5-6 片   | 5 層    | basic 3 / lore 2 |
+
+層數越多越難（要連續更多層不斷線）；嚴格度由碎片 layer 決定（lore 起始格少、每層都是判斷層）。
+
+### 碎片分類
+
+| layer | rarity | 說明 | 探查體驗 | 封存用途 |
 |-------|--------|------|----------|----------|
-| basic | common | 銝?祇???頩方楚?撣貊鞊?| 韏瑕? 3 ?潘?蝚?1 撅文?箸??惜 | ?箇???閮 |
-| basic | rare | 蝔????游撥???啣虜?曇情 | 韏瑕? 3 ??| ?箇???閮 |
-| lore | rare | ?湔?剝?擛潭芣擃???璆見摮?| 韏瑕? 2 ?潘???惜??斗撅歹???蝺?| 擛潭芸???閮嚗?閬?隞塚? |
+| basic | common | 一般遭遇，看到蹤跡與異常現象 | 起始 3 格，第 1 層可為氛圍層 | 基礎版筆記本 |
+| basic | rare | 稀有遭遇，更強烈的異常現象 | 起始 3 格 | 基礎版筆記本 |
+| lore | rare | 直接遭遇鬼怪本體，看清楚樣子 | 起始 2 格，所有層皆為判斷層，最易斷線 | 鬼怪志版筆記本（必要條件） |
 
-### Auth 瘚?
+### Auth 流程
 
-- **Google**嚗signInWithOAuth({ provider: 'google' })` ??頝唾???`window.location.origin`
-- **Email OTP**嚗signInWithOtp({ email })` ??6 雿?霅Ⅳ ??`verifyOtp({ email, token, type:'email' })`
+- **Google**：`signInWithOAuth({ provider: 'google' })` → 跳轉回 `window.location.origin`
+- **Email OTP**：`signInWithOtp({ email })` → 寄送 6 位驗證碼 → `verifyOtp({ email, token, type:'email' })`
 
-### 擐活?餃?迂閮剖?嚗etupName.jsx嚗?
-`usePlayer` 撱箇??啁摰嗆? `display_name` ?身蝛箏?銝?`''`嚗身 `isNew = true`?App.jsx` ??player 摮雿?`isNew` ??true ???芾楝?梢＊蝷?`SetupName`?撓?亙?蝔???`updateName()` ??`setIsNew(false)` ???脣???
-> `players.display_name` ??迂蝛箏?銝莎?
+### 首次登入名稱設定（SetupName.jsx）
+
+`usePlayer` 建立新玩家時 `display_name` 預設為空字串 `''`，並設 `isNew = true`。
+`App.jsx` 在 player 存在但 `isNew` 為 true 時，攔截路由顯示 `SetupName` 頁面。
+玩家輸入名稱 → `updateName()` 寫入 DB → `setIsNew(false)` → 進入遊戲。
+
+> Supabase `players.display_name` 欄位需允許空字串：
 > ```sql
 > ALTER TABLE players ALTER COLUMN display_name SET DEFAULT '';
 > ```
 
-### ?啣????批捆
+### 調頻盤互動（Map.jsx）
 
-??`content-generation-prompt.md` 璅⊥蝯?AI ?? SQL嚗?摨??伐?
+收音機調頻是唯一的感知入口，取代舊的雷達掃描與定位點。
 
-1. `stories` ????`sealed_narrative`嚗{fragment_label}` 雿?蝚佗??lore_narrative`?image_slug`
-2. `story_fragments` ????`fragment_label`?fragment_text`?layer`?rarity`??*?啣?璇辣嚗瘝?敺?**
-3. `fragment_atmosphere` ??瘥? 3-5 璇?**?曉??啁??啣虜嚗??膩?脣敺?鈭?*
-4. `fragment_scenes` ??瘥惜?啣末 1 ?湔嚗 `is_skippable`嚗?*?敺?撅文‵ `ending_high`/`ending_low`**
-5. `scene_options` ??瘥?策 `signal_delta`嚗?瑕惜靽???delta?? ??delta<0嚗? `result_text`
+- **調頻盤**：一條頻帶 + 可拖動指針（手機左右拖）。掃過多數頻率是雜訊；接近訊號時雜訊變薄、波形浮現、收訊強度上升（「越來越近」的第六感回饋）。訊號有「吸附寬度」，不必對到像素級，靠近即高亮——調頻是氛圍與發現，不是難關。
+- **自動掃描鈕（可選）**：慢慢掃、碰到訊號自停。**和手動同樣免費**（差別是節奏，不收靈力）。
+- **頻帶上的訊號數**：由環境（時辰/天氣/節日，weather.js）對上 `story_fragments` 條件決定。整條都雜訊 = 此刻沒有接通得了的東西，換時間/天氣再來（符合低壓力）。
+- **訊號穩定**：環境不變時頻帶上是同一批訊號，重掃不重骰，沒有 reroll 漏洞。若要主動換一批，做一個明講的〔重新感知〕鈕（−1 靈力），這才是唯一該收費的搜尋動作。
+- **頂部狀態欄**：顯示此地環境（時辰 + 天氣 + 節日）與 GPS 座標（純調味）。
+- **視覺**：沿用 CRT scanlines + 深黑底 `#080604` + 暖金 `#c9b99a`；收訊強度的格/波形與探查時的訊號格是同一套 UI 語言。
 
-> ?? 瘝? `fragment_scenes` 閮???????曉閮??銝准?> ?? `is_skippable=true` 撅斗????`signal_delta` 敹? 0嚗ore 蝣???惜 `is_skippable=false`??> ?? ?唾??擛潦??箸?閬???撠望摰?蝣?憛?time/weather/date 璇辣?停??signals.js ??????
-## 鞈?摨?Schema嚗??菔”?潘?
+### 新增故事內容
+
+使用 `content-generation-prompt.md` 模板給 AI 生成 SQL，依序插入：
+
+1. `stories` — 含 `sealed_narrative`（基礎版骨架，`{fragment_label}` 佔位符）、`lore_narrative`（鬼怪志固定文字）、`image_slug`
+2. `story_fragments` — 含 `fragment_label`、`fragment_text`、`layer`、`rarity`、環境條件
+3. `fragment_atmosphere` — 每片碎片 3-5 條；**玩家站在現場感知到的異常，不描述進入後的事**
+4. `fragment_scenes` — 每片碎片**每層恰好 1 個場景**，含 `is_skippable`；場景內容是進入後的遭遇
+5. `scene_options` — 每個選項給 `signal_delta`（判斷層保證有 delta≥0 與 delta<0 的選項）+ `result_text`（選後顯示的氛圍）
+
+> ⚠️ 沒有 `fragment_scenes.layer_index >= 1` 記錄的碎片不會出現在訊號候選中。
+> ⚠️ `is_skippable=true` 層的所有選項 `signal_delta` 必須是 0。lore 碎片所有層必須 `is_skippable=false`。
+
+## 資料庫 Schema（關鍵表格）
 
 ### stories
 ```sql
 id UUID, title TEXT,
 difficulty TEXT,          -- 'normal'|'rare'|'legendary'
-creature_type TEXT, creature_description TEXT,
-sealed_narrative TEXT,    -- ?箇??爸?塚???{fragment_label} 雿?蝚?lore_narrative TEXT,      -- 擛潭芸??摰?鈭?image_slug TEXT           -- 撠? public/creatures/{image_slug}.webp
+creature_type TEXT,
+creature_description TEXT,
+sealed_narrative TEXT,    -- 基礎版故事骨架，含 {fragment_label} 佔位符
+lore_narrative TEXT,      -- 鬼怪志版固定故事（樣貌、起源、能力）
+image_slug TEXT           -- 鬼怪圖片短名，對應 public/creatures/{image_slug}.webp
 ```
 
-### 擛潭芸?????- 雿蔭 `public/creatures/{image_slug}.webp`嚗?00 ? 800 px ?游?嚗ebP < 120 KB
-- ?恍◢嚗偌憓冽??恬?瘛梢?? #080604嚗?賢?蜓擃?+ ??蝺?嚗?瞍祈???- basic 憿舐內?楛?脤蝵抬?opacity-50 + 暺?40% overlay嚗?lore 頛??堆?opacity-90嚗?摨瞍詨惜瘛∪??`#1e1e1e`
+### 鬼怪圖片規格
+- 位置：`public/creatures/{image_slug}.webp`
+- 尺寸：600 × 800 px（直式）
+- 格式：WebP，< 120 KB
+- 畫風：水墨插畫風，深黑背景（#080604），灰白冷光主體 + 暖金線條，帶汙漬老化感
+- basic 層顯示時加深色遮罩（opacity-50 + 黑色 40% overlay）；lore 層較清晰（opacity-90）
+- 底部漸層淡出至 `#1e1e1e`（card 背景色），自然融入內容
 
 ### story_fragments
 ```sql
 id UUID, story_id UUID,
 layer TEXT,               -- 'basic'|'lore'
 rarity TEXT,              -- 'common'|'rare'
-fragment_label TEXT, fragment_text TEXT,
-time_condition TEXT,      -- NULL|'dawn'|'day'|'dusk'|'night'   ???箸?閬?
-weather_condition TEXT,   -- NULL|'clear'|'cloudy'|'rain'|'fog' ???箸?閬?
-date_condition TEXT,      -- NULL|'ghost_month'|'qingming'|'dongzhi' ???箸?閬?
+fragment_label TEXT,      -- 痕跡標籤（短）→ sealed_narrative 佔位符對應
+fragment_text TEXT,       -- 痕跡描述（一句話）
+time_condition TEXT, weather_condition TEXT, date_condition TEXT,  -- 調頻訊號的篩選條件
 motif_tags TEXT[] DEFAULT '{}', is_user_submitted BOOLEAN DEFAULT false
 ```
 
 ### fragment_atmosphere
 ```sql
 id UUID, story_fragment_id UUID,
-atmosphere_text TEXT      -- ?曉??啁??啣虜嚗洵銝鈭箇迂 2-3 ??```
+atmosphere_text TEXT
+-- 玩家站在現場感知到的異常，第一人稱，2-3句
+-- 例：「廢棄大樓五樓透著燈光，但這棟樓停電三年了」
+-- 玩家據此決定要不要通靈深入，不描述進入後的事
+```
 
-### fragment_scenes嚗?惜蝯?甈?嚗?```sql
+### fragment_scenes
+```sql
 id UUID, story_fragment_id UUID,
-layer_index INTEGER,      -- 1??嚗?撅斗憟?1 ???atmosphere_text TEXT,     -- ?脣?曉敺??剝???
-is_skippable BOOLEAN,     -- true=閰脣惜?賊???delta 0嚗? basic嚗?false=?斗撅歹?lore ??false嚗?ending_high TEXT,         -- ?惜蝯?嚗4 ?潭????嗅偏嚗??敺?撅文‵嚗?ending_low TEXT           -- ?惜蝯?嚗??? ?潭????嗅偏嚗??敺?撅文‵嚗?```
+layer_index INTEGER,      -- 1開始，每層恰好 1 個場景（多個場景可共用同層，防記答案）
+atmosphere_text TEXT,     -- 進入現場後的遭遇敘事（構成 exploration_narrative）
+is_skippable BOOLEAN,     -- true=該層所有選項 delta=0（僅 basic）；false=判斷層（lore 全部 false）
+ending_high TEXT,         -- 最後一層成功且 tier='high' 時顯示的收尾文字（null=省略）
+ending_low  TEXT          -- 最後一層成功且 tier='low' 時顯示的收尾文字（null=省略）
+```
 
-### scene_options嚗????啣漲??
+### scene_options（已改版）
 ```sql
 id UUID, scene_id UUID,
 text TEXT,
-signal_delta SMALLINT,    -- -2 ~ +1
-result_text TEXT          -- ?詨?憿舐內???交???撅?刻?????撅嚗?```
+signal_delta SMALLINT,    -- -2 ~ +1，選後對訊號格的增減
+result_text TEXT          -- 選後顯示的一句氛圍（訊號穩住 / 開始散 / 它退了一步…）
+```
 
-### fragments嚗摰嗆???
+### fragments（玩家持有）
 ```sql
 id UUID, player_id UUID, story_fragment_id UUID,
-notebook_id UUID, player_tag TEXT,
-exploration_narrative TEXT,  -- buildNarrative 銝脰絲??交?鈭?obtained_at TIMESTAMPTZ
+notebook_id UUID,
+player_tag TEXT,
+exploration_narrative TEXT,  -- 玩家走過的場景敘事串聯（buildNarrative）
+obtained_at TIMESTAMPTZ
 ```
 
 ### notebooks
 ```sql
 id UUID, player_id UUID, name TEXT,
-capacity INTEGER DEFAULT 15, type TEXT DEFAULT 'personal',
+capacity INTEGER DEFAULT 15,
+type TEXT DEFAULT 'personal',
 status TEXT DEFAULT 'active',  -- 'active'|'sealed'
 sealed_at TIMESTAMPTZ, story_id UUID,
 sealed_layer TEXT,             -- 'basic'|'lore'
-sealed_story TEXT
+sealed_story TEXT              -- 封存後生成的完整故事
 ```
 
 ### creature_pages
@@ -245,45 +352,65 @@ unlocked_layer TEXT,      -- 'basic'|'lore'
 obtained_at TIMESTAMPTZ
 ```
 
-## AI ???? SQL ???
-??`content-generation-prompt.md` 璅⊥???菔???
+## AI 生成故事 SQL 的鐵則
 
-1. **???id ?? UUID**嚗??????芾??`[0-9a-f]`嚗l`/`o`/`g`/`s`/`w` 蝑? hex 摮?????INSERT ??憭望?
-2. **difficulty** ??`'normal'`/`'rare'`/`'legendary'`嚗?*layer** ??`'basic'`/`'lore'`嚗?*rarity** ??`'common'`/`'rare'`
-3. **story_fragments ??`fragment_label` + `fragment_text`**嚗??? difficulty/text嚗?4. **fragment_scenes ??`is_skippable`**嚗asic 擐惜??true嚗ore ??false嚗?**?敺?撅文‵ `ending_high`/`ending_low`**
-5. **fragment_atmosphere ?芣?餈啁?湔???*嚗脣敺??剝?撖怠 fragment_scenes
-6. **scene_options 瘥?策 `signal_delta`嚗?2~+1嚗? `result_text`**嚗?瑕惜????delta?? ??delta<0嚗s_skippable 撅文 delta=0
-7. **銝?璆萄漲??**嚗???斗嚗???憿航府???8. **stories ??`image_slug`**嚗?*?唾??箸?閬?撠勗‵ time/weather/date 璇辣**
-9. **sealed_narrative 雿?蝚血?朣?fragment_label**嚗?*lore_narrative ?箏?銝雿?蝚?*
-10. **?桀?? `''` 頝唾**嚗??典???
+使用 `content-generation-prompt.md` 作為模板。關鍵規則：
 
-> ?? **CTE ?琿**嚗?隤??CTE 撖怠??撠隞閰Ｖ??航?嚗??? `RETURNING` 撘????舐?函? CTE嚗?> ```sql
+1. **所有 id 必須是合法 UUID 格式**，每個不同；UUID 只能含 `[0-9a-f]`，`l`、`o`、`g` 等非 hex 字元會導致 INSERT 靜默失敗
+2. **stories.difficulty** 只能填 `'normal'`、`'rare'`、`'legendary'`
+3. **story_fragments.layer** 只能填 `'basic'`、`'lore'`；**rarity** 只能填 `'common'`、`'rare'`
+4. **story_fragments 用 `fragment_label` + `fragment_text`**（不是舊的 `difficulty` / `text`）
+5. **fragment_scenes 必須包含 `is_skippable`**（basic 第一層可 true；lore 全部 false）
+6. **fragment_atmosphere 只描述現場感知到的異常**，不描述進入後的事；進入後的遭遇寫在 fragment_scenes
+7. **scene_options 每個選項給 `signal_delta`（−2~+1）+ `result_text`**；判斷層要同時有 delta≥0 與 delta<0 的選項；is_skippable 層所有選項 delta=0
+8. **三個選項都要極度合理**，靠感知判斷，不能有明顯該排除的
+9. **stories 必須包含 `image_slug`**（英文小寫+底線，不含副檔名）
+10. **sealed_narrative 的 `{佔位符}` 必須和 `fragment_label` 完全一致**；**lore_narrative 是固定文字**，不含佔位符
+11. **單引號用 `''` 跳脫**，不使用反斜線
+
+> ⚠️ **CTE 遷移陷阱**：PostgreSQL CTE snapshot 機制導致同一語句內 CTE 寫入的列對其他查詢不可見，必須透過 `RETURNING` 引用。每個場景用獨立 CTE：
+> ```sql
 > WITH sc AS (
->   INSERT INTO fragment_scenes (id, story_fragment_id, layer_index, atmosphere_text, is_skippable, ending_high, ending_low)
->   VALUES (gen_random_uuid(), 'fragment-uuid', 3, '?蝯惜?湔', false, '銋暹楊?仿??嗅偏', '撌桅??瑞??撠?)
+>   INSERT INTO fragment_scenes (id, story_fragment_id, layer_index, atmosphere_text, is_skippable)
+>   VALUES (gen_random_uuid(), 'fragment-uuid', 1, '場景文字', false)
 >   RETURNING id
 > )
 > INSERT INTO scene_options (id, scene_id, text, signal_delta, result_text)
 > SELECT gen_random_uuid(), sc.id, v.text, v.signal_delta, v.result_text FROM sc
 > CROSS JOIN (VALUES
->   ('鞎潛銝??豢?', 1, '閮?蝛拐?鈭?),
->   ('蝒????, -2, '閮??其???????)
+>   ('貼當下的選擇', 1, '訊號穩住了'),
+>   ('突兀的選擇', -2, '訊號在你動作的瞬間散掉。')
 > ) AS v(text, signal_delta, result_text);
 > ```
-> ??蝯惜??`ending_high`/`ending_low` 憛?`NULL`??
-### 撌脩擛潭?image_slug 撠
-| 擛潭?| image_slug | 擛潭?| image_slug |
-|------|-----------|------|-----------|
-| 撅? | shushi | 憭??犖 | night_shift |
-| 撱??勗? | hanako | ?敺??剔?銋恥 | last_passenger |
-| ?啣??餅０ | elevator_bride | 銝??????? | 317_coworker |
-| ???撅?| neighbor | 撠??犖 | metro_stranger |
-| 銝???摮貊? | transfer_student | | |
 
-## ?祆活?寧?敺祕雿?鈭斤策 Code嚗?摨?
+### 已知鬼怪 image_slug 對照
+| 鬼怪 | image_slug |
+|------|-----------|
+| 屍鼠 | shushi |
+| 廁所花子 | hanako |
+| 新娘電梯 | elevator_bride |
+| 隔壁的鄰居 | neighbor |
+| 三樓的轉學生 | transfer_student |
+| 夜班的那個人 | night_shift |
 
-1. **頝?`005_signal_clarity.sql`**嚗 scene_options 甈? + 頧??暹?鞈???摰?撖怠??祆迤蝣?skippable ?賊???`result_text`嚗?征摮葡嚗?2. **頝?`006_tiered_ending.sql`**嚗ragment_scenes ??`ending_high`/`ending_low`??暹?擛潭迎?撅?蝑???敺?撅方??拇挾?惜?嗅偏??3. **??`lib/exploration.js`**嚗xplorationOverlay ?寧 `loadInvestigation`/`applyChoice`/`getEnding`/`buildNarrative`嚗宏?方? `is_correct`/`fail_text`/25% 隤文?憓?? UI嚗???嚗 delta ?嚗飛 0 ??摮??嚗???靘?`tier` 憿舐內 `getEnding` ?嗅偏??FragmentReveal??4. **?啣? `lib/signals.js`**嚗??亥憚?選??交?蝔桀?嚗? ?啣?璇辣??嚗撓?箸迨?餉矽?餃??????蝣?嚗??啣?銝?撉啜?5. **擃? ????**嚗撠??? + StaminaBar ?辣?孵?嚗B 甈? `stamina`/`stamina_updated_at` ?怎?嚗????芸??瘛勗??1嚗??舫???唳??乓?1嚗?6. **Map.jsx ?寡矽?餌**嚗宏?日????雿??toScreen()`/anomaly-dot/jitter??餃葆 + ????+ ?嗉??? + ????嚗?摮?瘚桃 atmosphere嚗征?圈＊蝷箝???摰???? signals.js ????7. **嚗?賂????唳??乓?**嚗?1 ??嚗撥?嗆?銝?寧????
-## ?嗡?撠撖虫?
+## 本次改版待實作（交給 Code）
 
-- ?舫?蝑??穿?憭犖??嚗B 撌脤???`shared_notebooks`嚗?- Meta Horror ?冽?鈭辣嚗B 銵?`meta_horror_events` 撌脣遣嚗?- Web Push ?冽嚗???皛踵???
-- 隞祥???摰嗆?蝔踵?蝔?- 擛潭芰?閮 UI嚗creature_pages` 撌脰圾???豢??閮剛??亙嚗?- ??蝑???嚗???????隤秉?嚗狩?芸???憭?.5嚗?- 摰撣唾??芷嚗? players + signOut嚗uth.users ??嚗?
+✅ 全部完成（2026-06-02）：
+
+1. **`005_signal_clarity.sql`**：已套用，`scene_options` 欄位為 `signal_delta` / `result_text`。
+2. **`lib/exploration.js`**：`loadInvestigation` / `applyChoice` / `buildNarrative` 全部實作，ExplorationOverlay 已接上。
+3. **體力 → 靈力**：StaminaBar label、ExplorationOverlay 按鈕文案（靈力不足、通靈深入）全部更新。DB 欄位暫留 `stamina`。
+4. **Map.jsx 調頻盤**：頻帶 + 拖動指針，`fragPos()` 依 fragment id hash 給定穩定頻率位置，SNAP 9% / LOCK 4% 判斷。
+5. **weather.js 條件篩選**：`time_condition` / `weather_condition` / `date_condition` 客戶端過濾已實作。
+6. **〔重新感知〕鈕**：−1 靈力，強制重載訊號（同時清空 usedIds）。
+
+## 其他尚未實作
+
+- 聯靈筆記本（多人協作，DB schema 已預留 `shared_notebooks` 等表）
+- Meta Horror 隨機事件（DB 表 `meta_horror_events` 已建）
+- Web Push 推播通知（靈力回滿提醒）
+- 付費金流
+- 玩家投稿流程
+- 鬼怪筆記本 UI（`creature_pages` 已在 DB 解鎖，書架頁待設計入口）
+- 協會等級加權計算（普通×1、稀有×2、傳說×3；鬼怪志版額外×1.5）
+- 完整帳號刪除（目前刪除 players 記錄 + signOut，auth.users 記錄留存在 Supabase）
