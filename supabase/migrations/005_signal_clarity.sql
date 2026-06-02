@@ -1,0 +1,16 @@
+-- Migration 005: signal clarity model
+-- scene_options: replace is_correct/fail_text with signal_delta/result_text
+-- Already applied on 2026-06-02 via Supabase dashboard.
+-- Kept here for documentation only — do NOT re-run.
+
+-- ALTER TABLE scene_options
+--   ADD COLUMN signal_delta SMALLINT NOT NULL DEFAULT 0,
+--   ADD COLUMN result_text  TEXT;
+--
+-- UPDATE scene_options SET signal_delta =  1 WHERE is_correct = true;
+-- UPDATE scene_options SET signal_delta = -2 WHERE is_correct = false;
+-- UPDATE scene_options SET result_text = COALESCE(fail_text, '');
+--
+-- ALTER TABLE scene_options
+--   DROP COLUMN is_correct,
+--   DROP COLUMN fail_text;

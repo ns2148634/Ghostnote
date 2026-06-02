@@ -1,289 +1,334 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
-import { getWeatherCondition, getTimeCondition } from '../lib/weather'
+import { getWeatherCondition, getTimeCondition, getDateCondition } from '../lib/weather'
 import ExplorationOverlay from '../components/exploration/ExplorationOverlay'
 import NotebookSelectModal from '../components/exploration/NotebookSelectModal'
 
-const TIME_LABELS = { dawn: '清晨', day: '白天', dusk: '黃昏', night: '深夜' }
-const IDLE_MSGS   = ['環境靜默', '無異常訊號', '周圍平靜', '等待偵測']
-const ANOMALY_MSGS = (n) => [`感知到 ${n} 處異常`, `偵測到 ${n} 個訊號`, `異常點：${n}`]
+const TIME_LABELS    = { dawn: '清晨', day: '白天', dusk: '黃昏', night: '深夜' }
+const WEATHER_LABELS = { clear: '晴', cloudy: '陰', fog: '霧', rain: '雨' }
+const IDLE_MSGS = ['靜候訊號', '頻帶寂靜', '等待感應', '無異常訊號']
+const SNAP_PCT  = 9  // % — signal starts to glow
+const LOCK_PCT  = 4  // % — considered "locked on"
+const FREQ_LABELS = [88, 92, 96, 100, 104, 108]
 
-// Convert GPS offset → screen percentage (player always at 50 %, 50 %)
-function toScreen(playerPos, anomaly) {
-  const centre = playerPos || { lat: 25.0478, lng: 121.5319 }
-  const dx =  (anomaly.lng - centre.lng) * 111320 * Math.cos(centre.lat * Math.PI / 180)
-  const dy = -(anomaly.lat - centre.lat) * 110540
-  const pctPerMeter = 0.028   // ~1 km = ±28 % from centre
-  return {
-    x: Math.max(12, Math.min(88, 50 + dx * pctPerMeter)),
-    y: Math.max(12, Math.min(88, 50 + dy * pctPerMeter)),
-  }
+// Deterministic position from fragment id (5–93%)
+function fragPos(id) {
+  const num = parseInt(id.replace(/-/g, '').slice(0, 8), 16)
+  return 5 + (num % 88)
 }
 
 export default function MapPage({ player, notebooks, stamina, consume, addFragment }) {
-  const [pos, setPos]           = useState(null)
-  const [anomalies, setAnomalies] = useState([])
-  const [scanning, setScanning] = useState(false)
-  const [timeLabel, setTimeLabel] = useState('')
-  const [statusMsg, setStatusMsg] = useState(IDLE_MSGS[0])
-  const [overlay, setOverlay]   = useState(null)
+  const [signals, setSignals]     = useState([])
+  const [usedIds, setUsedIds]     = useState(new Set())
+  const [loading, setLoading]     = useState(true)
+  const [env, setEnv]             = useState({ time: '', weather: '', date: null })
+  const [pos, setPos]             = useState(null)
+  const [needlePos, setNeedlePos] = useState(15)
+  const [lockedAtm, setLockedAtm] = useState(null)
+  const [overlay, setOverlay]     = useState(null)
   const [noStamina, setNoStamina] = useState(false)
-  const [pendingFrag, setPending] = useState(null)
+  const [pending, setPending]     = useState(null)
+  const [idleMsg, setIdleMsg]     = useState(IDLE_MSGS[0])
 
-  // Direct GPS — no Leaflet
+  const bandRef    = useRef(null)
+  const dragging   = useRef(false)
+  const envRef     = useRef(env)
+  useEffect(() => { envRef.current = env }, [env])
+
+  // ── Init: GPS → env → signals ────────────────────────────────────────────
   useEffect(() => {
-    if (!navigator.geolocation) return
-    const id = navigator.geolocation.watchPosition(
-      p => setPos({ lat: p.coords.latitude, lng: p.coords.longitude }),
-      null,
-      { enableHighAccuracy: true },
+    if (!navigator.geolocation) { initEnv(null); return }
+    navigator.geolocation.getCurrentPosition(
+      p => { const c = { lat: p.coords.latitude, lng: p.coords.longitude }; setPos(c); initEnv(c) },
+      ()  => initEnv(null),
+      { enableHighAccuracy: false, timeout: 6000 }
     )
-    return () => navigator.geolocation.clearWatch(id)
   }, [])
 
-  useEffect(() => {
-    const t = getTimeCondition()
-    setTimeLabel(TIME_LABELS[t] || '')
-  }, [])
+  async function initEnv(coords) {
+    const time    = getTimeCondition()
+    const date    = getDateCondition()
+    const weather = coords ? await getWeatherCondition(coords.lat, coords.lng) : 'clear'
+    const e = { time, weather, date }
+    setEnv(e)
+    await fetchSignals(time, weather, date)
+  }
 
+  async function fetchSignals(time, weather, date) {
+    setLoading(true)
+    setUsedIds(new Set())
+
+    // 1. Fragment IDs that have at least one scene
+    const { data: sceneRows } = await supabase
+      .from('fragment_scenes').select('story_fragment_id').gte('layer_index', 1)
+    const eligibleIds = [...new Set((sceneRows || []).map(r => r.story_fragment_id))]
+    if (!eligibleIds.length) { setSignals([]); setLoading(false); return }
+
+    // 2. Load fragments + client-side env filter
+    const { data: frags } = await supabase
+      .from('story_fragments')
+      .select('id, layer, rarity, fragment_label, fragment_text, time_condition, weather_condition, date_condition')
+      .in('id', eligibleIds)
+
+    const filtered = (frags || []).filter(f => {
+      if (f.time_condition    && f.time_condition    !== time)    return false
+      if (f.weather_condition && f.weather_condition !== weather) return false
+      if (f.date_condition    && f.date_condition    !== date)    return false
+      return true
+    })
+    if (!filtered.length) { setSignals([]); setLoading(false); return }
+
+    // 3. Atmospheres
+    const { data: atms } = await supabase
+      .from('fragment_atmosphere').select('*')
+      .in('story_fragment_id', filtered.map(f => f.id))
+    const atmByFrag = {}
+    for (const a of atms || []) (atmByFrag[a.story_fragment_id] ||= []).push(a)
+
+    setSignals(filtered.map(f => ({
+      id: f.id,
+      fragment: f,
+      position: fragPos(f.id),
+      atmospheres: atmByFrag[f.id] || [],
+    })))
+    setLoading(false)
+  }
+
+  // ── Active signals (minus used) ──────────────────────────────────────────
+  const activeSignals = useMemo(
+    () => signals.filter(s => !usedIds.has(s.id)),
+    [signals, usedIds]
+  )
+
+  // ── Nearest / locked signal ──────────────────────────────────────────────
+  const nearestSignal = useMemo(() => {
+    let best = null, bestDist = Infinity
+    for (const s of activeSignals) {
+      const d = Math.abs(needlePos - s.position)
+      if (d < SNAP_PCT && d < bestDist) { best = s; bestDist = d }
+    }
+    return best
+  }, [needlePos, activeSignals])
+
+  const isLocked = !!nearestSignal && Math.abs(needlePos - nearestSignal.position) < LOCK_PCT
+
+  // Pick atmosphere text once when locked signal changes
   useEffect(() => {
-    if (scanning || anomalies.length > 0) return
+    if (!isLocked || !nearestSignal) { setLockedAtm(null); return }
+    const atms = nearestSignal.atmospheres
+    setLockedAtm(
+      atms.length > 0
+        ? atms[Math.floor(Math.random() * atms.length)].atmosphere_text
+        : '這裡有什麼不尋常。'
+    )
+  }, [isLocked, nearestSignal?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Idle message cycle ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (isLocked || overlay || nearestSignal || loading) return
     let i = 0
-    const id = setInterval(() => { i = (i + 1) % IDLE_MSGS.length; setStatusMsg(IDLE_MSGS[i]) }, 4000)
-    return () => clearInterval(id)
-  }, [scanning, anomalies.length])
+    const t = setInterval(() => { i = (i + 1) % IDLE_MSGS.length; setIdleMsg(IDLE_MSGS[i]) }, 3500)
+    return () => clearInterval(t)
+  }, [isLocked, overlay, nearestSignal, loading])
 
-  function jitter(max = 0.005) { return (Math.random() - 0.5) * 2 * max }
-
-  function randomPick(arr) { return arr[Math.floor(Math.random() * arr.length)] }
-  function pickN(arr, n) {
-    const copy = [...arr]
-    const out = []
-    while (out.length < n && copy.length) {
-      const i = Math.floor(Math.random() * copy.length)
-      out.push(copy.splice(i, 1)[0])
-    }
-    return out
+  // ── Band drag ────────────────────────────────────────────────────────────
+  function posFromEvent(e) {
+    const rect = bandRef.current?.getBoundingClientRect()
+    if (!rect) return needlePos
+    return Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100))
   }
-  function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5) }
-
-  async function handleScan() {
-    if (scanning || stamina < 1) return
-    setScanning(true)
-    setStatusMsg('偵測中...')
-    const ok = await consume(1)
-    if (!ok) { setScanning(false); setStatusMsg(IDLE_MSGS[0]); return }
-
-    const centre = pos || { lat: 25.0478, lng: 121.5319 }
-    try { await getWeatherCondition(centre.lat, centre.lng) } catch {}
-
-    const { data: eligibleScenes } = await supabase
-      .from('fragment_scenes')
-      .select('story_fragment_id')
-      .gte('layer_index', 1)
-    const ids = [...new Set((eligibleScenes || []).map(n => n.story_fragment_id))]
-    const count = 3 + Math.floor(Math.random() * 3)
-
-    const spots = Array.from({ length: count }, () => ({
-      id: crypto.randomUUID(),
-      lat: centre.lat + jitter(),
-      lng: centre.lng + jitter(),
-      intensity: 0.3 + Math.random() * 0.7,
-      eligibleIds: ids,
-    }))
-
-    setAnomalies(spots)
-    setScanning(false)
-    const pick = ANOMALY_MSGS(count)
-    setStatusMsg(pick[Math.floor(Math.random() * pick.length)])
+  function onBandDown(e) {
+    e.preventDefault()
+    dragging.current = true
+    bandRef.current?.setPointerCapture(e.pointerId)
+    setNeedlePos(posFromEvent(e))
   }
+  function onBandMove(e) { if (dragging.current) setNeedlePos(posFromEvent(e)) }
+  function onBandUp()    { dragging.current = false }
 
-  async function handleAnomalyClick(anomaly) {
-    if (!anomaly.eligibleIds.length) return
-    const fragmentId = randomPick(anomaly.eligibleIds)
-
-    const [{ data: frag }, { data: atmospheres }, { data: scenes }] = await Promise.all([
-      supabase.from('story_fragments').select('*').eq('id', fragmentId).single(),
-      supabase.from('fragment_atmosphere').select('*').eq('story_fragment_id', fragmentId),
-      supabase.from('fragment_scenes').select('*').eq('story_fragment_id', fragmentId).order('layer_index'),
-    ])
-    if (!frag) return
-
-    const atmRow = randomPick(atmospheres || [])
-    const atmosphereText = atmRow?.atmosphere_text || '這裡有什麼不尋常。'
-
-    // Batch-fetch all options for all scenes in one query
-    const sceneIds = (scenes || []).map(s => s.id)
-    const { data: allOptionsRaw } = sceneIds.length
-      ? await supabase.from('scene_options').select('*').in('scene_id', sceneIds)
-      : { data: [] }
-    const optsByScene = {}
-    for (const o of allOptionsRaw || []) {
-      ;(optsByScene[o.scene_id] ||= []).push(o)
-    }
-
-    const layerIndices = [...new Set((scenes || []).map(s => s.layer_index))].sort()
-    const layers = []
-    for (const idx of layerIndices) {
-      const pool = (scenes || []).filter(s => s.layer_index === idx)
-      const scene = randomPick(pool)
-      if (!scene) continue
-
-      const allOptions = optsByScene[scene.id] || []
-
-      if (scene.is_skippable) {
-        const opts = allOptions.map(o => ({ text: o.text, isCorrect: true, failText: '' }))
-        if (opts.length === 0) continue
-        layers.push({ sceneText: scene.atmosphere_text, options: shuffle(opts) })
-      } else {
-        const correct = randomPick(allOptions.filter(o => o.is_correct))
-        const wrongs = pickN(allOptions.filter(o => !o.is_correct), 2)
-        if (!correct) continue
-        layers.push({
-          sceneText: scene.atmosphere_text,
-          options: shuffle([correct, ...wrongs]).map(o => ({
-            text: o.text,
-            isCorrect: o.is_correct,
-            failText: o.fail_text,
-          })),
-        })
-      }
-    }
-
+  // ── Actions ──────────────────────────────────────────────────────────────
+  function handleEnterOverlay() {
+    if (!isLocked || !nearestSignal) return
+    setOverlay({ signalId: nearestSignal.id, atmosphereText: lockedAtm || '', fragment: nearestSignal.fragment })
     setNoStamina(false)
-    setOverlay({ anomalyId: anomaly.id, atmosphereText, layers, fragment: frag })
   }
 
   async function handleDeepen() {
     if (stamina < 1) { setNoStamina(true); return false }
     const ok = await consume(1)
     if (!ok) { setNoStamina(true); return false }
-    setAnomalies(prev => prev.filter(a => a.id !== overlay?.anomalyId))
+    if (overlay?.signalId) setUsedIds(prev => new Set([...prev, overlay.signalId]))
     return true
   }
 
+  async function handleRefresh() {
+    if (stamina < 1 || loading) return
+    const ok = await consume(1)
+    if (!ok) return
+    const { time, weather, date } = envRef.current
+    await fetchSignals(time, weather, date)
+  }
+
   function handleSuccess(frag, narrative) {
-    setPending({ frag, anomalyId: overlay.anomalyId, narrative })
+    setPending({ frag, narrative })
     setOverlay(null)
   }
 
   async function handleNotebookSelect(notebookId) {
-    if (!pendingFrag) return
-    await addFragment(notebookId, pendingFrag.frag.id, pendingFrag.narrative || '')
+    if (!pending) return
+    await addFragment(notebookId, pending.frag.id, pending.narrative || '')
     setPending(null)
   }
 
-  const dotColor = scanning ? 'bg-accent animate-pulse'
-    : anomalies.length > 0   ? 'bg-danger animate-pulse'
-    : 'bg-dim'
+  // ── Derived display ──────────────────────────────────────────────────────
+  const statusText = loading          ? '感應中...'
+    : isLocked                        ? '— 訊號定位 —'
+    : nearestSignal                   ? '調頻中...'
+    : activeSignals.length === 0      ? '此刻無訊號'
+    : idleMsg
 
+  const timeLabel    = TIME_LABELS[env.time]       || ''
+  const weatherLabel = WEATHER_LABELS[env.weather] || ''
+
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="flex-1 relative overflow-hidden" style={{ background: '#080604' }}>
+    <div className="flex-1 relative overflow-hidden flex flex-col" style={{ background: '#080604' }}>
 
-      {/* ── Horror scanner background ── */}
-      <div className="absolute inset-0 pointer-events-none select-none">
-        {/* CRT scanlines */}
-        <div className="absolute inset-0" style={{
-          backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(201,185,154,0.013) 3px,rgba(201,185,154,0.013) 4px)',
-        }} />
-        {/* Radar rings */}
-        {[18, 34, 50, 66, 82].map((pct, i) => (
-          <div key={i} className="absolute rounded-full" style={{
-            width: `${pct}%`, height: `${pct}%`,
-            top: '50%', left: '50%',
-            transform: 'translate(-50%,-50%)',
-            border: `1px solid rgba(201,185,154,${i === 0 ? 0.07 : 0.04})`,
-          }} />
-        ))}
-        {/* Crosshair */}
-        <div className="absolute inset-x-0" style={{ top: '50%', height: '1px', background: 'rgba(201,185,154,0.045)' }} />
-        <div className="absolute inset-y-0" style={{ left: '50%', width: '1px', background: 'rgba(201,185,154,0.045)' }} />
-      </div>
+      {/* CRT scanlines */}
+      <div className="absolute inset-0 pointer-events-none" style={{
+        backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(201,185,154,0.013) 3px,rgba(201,185,154,0.013) 4px)',
+      }} />
+      {/* Vignette */}
+      <div className="absolute inset-0 pointer-events-none" style={{
+        background: 'radial-gradient(ellipse at center, transparent 40%, rgba(8,6,4,0.85) 100%)',
+      }} />
 
-      {/* ── Vignette ── */}
-      <div className="absolute inset-0 map-vignette pointer-events-none" />
-
-      {/* ── Status bar (top) ── */}
-      <div className="absolute top-3 inset-x-3 pointer-events-none z-10">
+      {/* ── Status bar ── */}
+      <div className="relative z-10 shrink-0 mt-3 mx-3">
         <div className="border border-dim/40 bg-[#080604]/80 backdrop-blur-sm px-4 py-2.5 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
-            <span className="font-mono text-muted text-xs tracking-wider">{timeLabel}</span>
+          <div className="flex items-center gap-2">
+            {timeLabel    && <span className="font-mono text-muted text-xs">{timeLabel}</span>}
+            {weatherLabel && <span className="font-mono text-dim   text-xs">{weatherLabel}</span>}
           </div>
-          <span className="font-mono text-muted text-xs tracking-wide">{statusMsg}</span>
+          <span className="font-mono text-muted text-xs tracking-wide">{statusText}</span>
         </div>
         {pos && (
-          <p className="font-mono text-dim/50 text-[10px] text-right mt-1 pr-1 tracking-wider">
-            {pos.lat.toFixed(4)}&nbsp;N&nbsp;&nbsp;{pos.lng.toFixed(4)}&nbsp;E
+          <p className="font-mono text-dim/40 text-[9px] text-right mt-1 pr-1 tracking-wider">
+            {pos.lat.toFixed(4)} N&nbsp;&nbsp;{pos.lng.toFixed(4)} E
           </p>
         )}
       </div>
 
-      {/* ── Anomaly dots ── */}
-      {anomalies.map(a => {
-        const { x, y } = toScreen(pos, a)
-        const s = Math.round(12 + a.intensity * 12)
-        const alpha = (0.5 + a.intensity * 0.5).toFixed(2)
-        return (
-          <button
-            key={a.id}
-            onClick={() => handleAnomalyClick(a)}
-            className="absolute anomaly-dot rounded-full z-10"
-            style={{
-              left: `${x}%`, top: `${y}%`,
-              width: s + 16, height: s + 16,
-              transform: 'translate(-50%,-50%)',
-              background: `radial-gradient(circle,rgba(201,185,154,${alpha}) 0%,rgba(201,185,154,0.05) 65%,transparent 100%)`,
-              boxShadow: `0 0 ${Math.round(s * 1.4)}px rgba(201,185,154,${(parseFloat(alpha) * 0.45).toFixed(2)})`,
-            }}
-          />
-        )
-      })}
-
-      {/* ── Player dot (centre, click = scan) ── */}
-      <button
-        onClick={handleScan}
-        disabled={scanning || stamina < 1}
-        className="absolute z-10 disabled:cursor-not-allowed"
-        style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)' }}
-      >
-        <div style={{ position: 'relative', width: 44, height: 44 }}>
-          <div className="anomaly-dot absolute inset-0 rounded-full" style={{
-            background: 'radial-gradient(circle,rgba(201,185,154,0.12) 0%,transparent 70%)',
-            border: '1px solid rgba(201,185,154,0.22)',
-          }} />
-          <div className="absolute" style={{
-            top: '50%', left: '50%',
-            transform: 'translate(-50%,-50%)',
-            width: 10, height: 10,
-            borderRadius: '50%',
-            background: '#c9b99a',
-            boxShadow: `0 0 12px 5px rgba(201,185,154,${scanning ? '0.85' : '0.38'})`,
-          }} />
-        </div>
-      </button>
-
-      {/* ── Stamina / scan hint ── */}
-      <div className="absolute pointer-events-none z-10" style={{ left: '50%', top: 'calc(50% + 30px)', transform: 'translateX(-50%)' }}>
-        <span className="font-mono text-[10px] tracking-[0.25em] text-dim">
-          {stamina < 1 ? '體力不足' : anomalies.length === 0 ? '點擊偵測' : ''}
-        </span>
+      {/* ── Centre area: atmosphere / idle ── */}
+      <div className="flex-1 flex flex-col items-center justify-center relative z-10 px-8 gap-6">
+        {isLocked && lockedAtm ? (
+          <>
+            <p key={nearestSignal?.id}
+               className="font-mono text-ink text-sm leading-7 text-center max-w-xs fade-in whitespace-pre-line">
+              {lockedAtm}
+            </p>
+            <button
+              onClick={handleEnterOverlay}
+              disabled={stamina < 1}
+              className="font-mono text-accent text-xs tracking-widest hover:text-ink transition-colors
+                         underline underline-offset-4 decoration-dim disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {stamina < 1 ? '靈力不足' : '通靈深入'}
+            </button>
+          </>
+        ) : loading ? (
+          <span className="font-mono text-dim text-xs animate-pulse tracking-widest">感應中...</span>
+        ) : activeSignals.length === 0 ? (
+          <p className="font-mono text-dim text-xs text-center leading-7">
+            此刻無異常訊號<br />換個時間再來
+          </p>
+        ) : (
+          <p className="font-mono text-dim/50 text-[10px] tracking-[0.3em]">
+            {nearestSignal ? '▷ 調頻中' : '左右拖動調頻'}
+          </p>
+        )}
       </div>
 
-      {/* ── Scan rings ── */}
-      {scanning && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-          <span className="scan-ring absolute w-16 h-16 rounded-full" />
-          <span className="scan-ring scan-ring-2 absolute w-16 h-16 rounded-full" />
-          <span className="scan-ring scan-ring-3 absolute w-16 h-16 rounded-full" />
+      {/* ── Frequency band ── */}
+      <div className="relative z-10 px-5 pb-1 shrink-0">
+        <div
+          ref={bandRef}
+          className="relative h-12 border border-dim/25 select-none cursor-pointer"
+          style={{ background: 'rgba(201,185,154,0.025)', touchAction: 'none' }}
+          onPointerDown={onBandDown}
+          onPointerMove={onBandMove}
+          onPointerUp={onBandUp}
+          onPointerCancel={onBandUp}
+        >
+          {/* Signal markers */}
+          {activeSignals.map(s => {
+            const dist   = Math.abs(needlePos - s.position)
+            const near   = dist < SNAP_PCT
+            const locked = dist < LOCK_PCT
+            return (
+              <div key={s.id} className="absolute top-1.5 bottom-1.5 pointer-events-none"
+                style={{
+                  left: `${s.position}%`,
+                  width: locked ? 2 : 1,
+                  transform: 'translateX(-50%)',
+                  background: locked ? '#c9b99a' : near ? 'rgba(201,185,154,0.65)' : 'rgba(201,185,154,0.22)',
+                  boxShadow: locked ? '0 0 10px 5px rgba(201,185,154,0.5)' : near ? '0 0 5px 2px rgba(201,185,154,0.28)' : 'none',
+                  transition: 'all 0.15s',
+                }}
+              />
+            )
+          })}
+
+          {/* Needle */}
+          <div className="absolute top-0 bottom-0 pointer-events-none"
+            style={{
+              left: `${needlePos}%`,
+              width: 1,
+              transform: 'translateX(-50%)',
+              background: '#c9b99a',
+              boxShadow: '0 0 6px 2px rgba(201,185,154,0.45)',
+            }}
+          />
+          {/* Needle tip triangle */}
+          <div className="absolute bottom-0 pointer-events-none"
+            style={{
+              left: `${needlePos}%`,
+              transform: 'translateX(-50%)',
+              width: 0, height: 0,
+              borderLeft: '4px solid transparent',
+              borderRight: '4px solid transparent',
+              borderBottom: '5px solid rgba(201,185,154,0.6)',
+            }}
+          />
         </div>
-      )}
+
+        {/* Frequency decoration labels */}
+        <div className="relative h-4 mt-0.5">
+          {FREQ_LABELS.map((f, i) => (
+            <span key={f} className="absolute font-mono text-[8px] text-dim/25 tracking-tight"
+              style={{ left: `${(i / (FREQ_LABELS.length - 1)) * 100}%`, transform: 'translateX(-50%)' }}>
+              {f}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Controls ── */}
+      <div className="relative z-10 flex items-center justify-end px-5 pb-4 shrink-0">
+        <button
+          onClick={handleRefresh}
+          disabled={stamina < 1 || loading}
+          className="font-mono text-dim text-[10px] tracking-widest hover:text-muted transition-colors
+                     disabled:opacity-25 disabled:cursor-not-allowed"
+        >
+          重新感知 −1
+        </button>
+      </div>
 
       {/* ── Exploration overlay ── */}
       {overlay && (
         <ExplorationOverlay
           atmosphereText={overlay.atmosphereText}
-          layers={overlay.layers}
           fragment={overlay.fragment}
           noStamina={noStamina}
           onClose={() => { setOverlay(null); setNoStamina(false) }}
@@ -293,9 +338,9 @@ export default function MapPage({ player, notebooks, stamina, consume, addFragme
       )}
 
       <NotebookSelectModal
-        open={!!pendingFrag}
+        open={!!pending}
         notebooks={notebooks}
-        fragment={pendingFrag?.frag}
+        fragment={pending?.frag}
         onSelect={handleNotebookSelect}
         onClose={() => setPending(null)}
       />
