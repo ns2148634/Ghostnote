@@ -8,7 +8,7 @@ import BottomNav from './components/layout/BottomNav'
 import Auth from './pages/Auth'
 import SetupName from './pages/SetupName'
 
-const MapPage       = lazy(() => import('./pages/Map'))
+const MapPage       = lazy(() => import('./pages/MapRoute'))
 const NotebookPage  = lazy(() => import('./pages/NotebookPage'))
 const BookshelfPage = lazy(() => import('./pages/BookshelfPage'))
 const ShopPage      = lazy(() => import('./pages/ShopPage'))

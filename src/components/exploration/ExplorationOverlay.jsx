@@ -116,8 +116,9 @@ export default function ExplorationOverlay({
   fragment,
   noStamina,
   onClose,
-  onDeepen,   // async () => bool — consumes stamina
-  onSuccess,  // (fragment, narrative) => void
+  onDeepen,              // async () => bool — consumes stamina
+  onSuccess,             // (fragment, narrative) => void
+  startScene = false,    // skip atmosphere phase, auto-call onDeepen on mount
 }) {
   const [phase, setPhase]               = useState('atmosphere')
   const [layers, setLayers]             = useState([])
@@ -131,6 +132,11 @@ export default function ExplorationOverlay({
   const walkedRef = useRef([])
   const { fontCls, leadingCls, idx: fontIdx, change: changeFont } = useReaderFont()
   const textCls = `${fontCls} ${leadingCls}`
+
+  // Auto-start: skip atmosphere, immediately begin investigation
+  useEffect(() => {
+    if (startScene) handleDeepen()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Compute ending text for 'fragment' outcome (depends on tier + last layer)
   const endingText = (pendingOutcome === 'fragment' && tier && layers[layerIdx])

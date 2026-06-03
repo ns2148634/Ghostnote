@@ -106,3 +106,17 @@ export async function getAvailableSignals(env, { playerId, ownedIds } = {}) {
 
   return signals.sort((a, b) => b.weight - a.weight)
 }
+
+// Weighted-random pick of one signal from the list.
+// Returns the fragment object, or null if list is empty.
+export function pickSignal(signals) {
+  if (!signals || signals.length === 0) return null
+  const total = signals.reduce((s, sig) => s + sig.weight, 0)
+  if (total <= 0) return signals[0].fragment
+  let r = Math.random() * total
+  for (const sig of signals) {
+    r -= sig.weight
+    if (r <= 0) return sig.fragment
+  }
+  return signals[signals.length - 1].fragment
+}
