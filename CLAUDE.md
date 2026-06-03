@@ -67,12 +67,13 @@ src/
 ├── lib/
 │   ├── supabase.js     Supabase client
 │   ├── weather.js      Open-Meteo + 時辰/節日判斷（調頻訊號的出沒條件來源）
-│   ├── signals.js      訊號可用性：每日輪替 + 條件加權，決定此刻調頻能掃到誰
+│   ├── signals.js      訊號可用性：每日輪替 + 條件加權 + pickSignal 加權隨機挑一
 │   └── exploration.js  探查邏輯：載入層、抽選項、累加訊號格、結算、分層結局
 └── pages/
     ├── Auth.jsx        登入（Google OAuth + Email OTP 兩步驟）
     ├── SetupName.jsx   首次登入設定調查員名稱（一次性）
-    ├── Map.jsx         感知主頁（收音機調頻盤，非地圖；檔名暫留 Map.jsx）
+    ├── Map.jsx         調頻盤純 UI 元件（props: env, playerId, onDeepDive）
+    ├── MapRoute.jsx    /map 路由包裝層：計算 env、管理 overlay/notebook、接線 Map ↔ ExplorationOverlay
     ├── NotebookPage.jsx 筆記本管理（FragmentCard 預設折疊，點擊展開完整敘事）
     ├── BookshelfPage.jsx 封存書架
     └── ShopPage.jsx    協會（玩家資訊、補給站、帳號管理）
@@ -120,9 +121,14 @@ current = min(10, stored + floor((now - updated_at) / 8分鐘))
 - **畫面**：深黑底 + CRT scanlines；一條水平頻帶、一根可拖指針、頂端顯示環境（時辰 + 天氣 + 節日）與 GPS 座標（純調味）。
 - **搜尋（拖指針，免費）**：接近訊號隱藏點時雜訊變薄、波形聚攏。訊號有「吸附寬度」，靠近即高亮，不需對到像素級。SNAP 9% / LOCK 4%。
 - **鎖定（放開指針，免費）**：在 LOCK zone 內放開 → `isHolding=true` → `fragment_atmosphere` 以打字機逐字浮現；再次拖動取消鎖定。
-- **接通後**：顯示氛圍描述 → 玩家選〔通靈深入〕(−1 靈力，進多層感知) 或放掉。
-- **空台**：環境無可用訊號時，整條頻帶都是雜訊，顯示「此刻無異常訊號，換個時間再來」。
-- **重新感知（可選）**：−1 靈力，清空 usedIds 並重新呼叫 `getAvailableSignals`。
+- **接通後**：氛圍文字打字機顯示 → 玩家選〔通靈深入〕(−1 靈力) 或放掉 → 重調。
+- **空台**：無可用訊號時顯示「今晚很安靜，沒有什麼接通得了」。
+- **自動掃描**：慢掃、碰到訊號自停，鎖定一樣要穩住。
+
+**元件架構**（`Map.jsx` ↔ `MapRoute.jsx`）：
+- `Map.jsx`：純 UI 元件（props: `env / playerId / onDeepDive`）。自行呼叫 `getAvailableSignals` + `pickSignal` 決定本輪訊號；鎖定後點〔通靈深入〕→ `onDeepDive(fragment)`。
+- `MapRoute.jsx`：/map 路由包裝。計算 `env`、管理 ExplorationOverlay + NotebookSelectModal。接到 `onDeepDive` 後開 `ExplorationOverlay(startScene=true)`，overlay 自動扣靈力 → 進場景。探查結束後 `scanKey++` → Map remount → 新一輪掃描。
+- `ExplorationOverlay` 的 `startScene=true`：mount 時自動呼叫 `handleDeepen`，跳過 atmosphere 階段（Map 已顯示過）。
 
 ### 訊號出沒規律（signals.js）
 
@@ -241,17 +247,6 @@ if (r.outcome === 'continue') { i++ /* 顯示下一層 */ }
 > ```sql
 > ALTER TABLE players ALTER COLUMN display_name SET DEFAULT '';
 > ```
-
-### 調頻盤互動（Map.jsx）
-
-收音機調頻是唯一的感知入口，取代舊的雷達掃描與定位點。
-
-- **調頻盤**：一條頻帶 + 可拖動指針（手機左右拖）。掃過多數頻率是雜訊；接近訊號時雜訊變薄、波形浮現、收訊強度上升（「越來越近」的第六感回饋）。訊號有「吸附寬度」，不必對到像素級，靠近即高亮——調頻是氛圍與發現，不是難關。
-- **自動掃描鈕（可選）**：慢慢掃、碰到訊號自停。**和手動同樣免費**（差別是節奏，不收靈力）。
-- **頻帶上的訊號數**：由環境（時辰/天氣/節日，weather.js）對上 `story_fragments` 條件決定。整條都雜訊 = 此刻沒有接通得了的東西，換時間/天氣再來（符合低壓力）。
-- **訊號穩定**：環境不變時頻帶上是同一批訊號，重掃不重骰，沒有 reroll 漏洞。若要主動換一批，做一個明講的〔重新感知〕鈕（−1 靈力），這才是唯一該收費的搜尋動作。
-- **頂部狀態欄**：顯示此地環境（時辰 + 天氣 + 節日）與 GPS 座標（純調味）。
-- **視覺**：沿用 CRT scanlines + 深黑底 `#080604` + 暖金 `#c9b99a`；收訊強度的格/波形與探查時的訊號格是同一套 UI 語言。
 
 ### 新增故事內容
 
