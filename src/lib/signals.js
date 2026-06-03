@@ -1,122 +1,144 @@
+// signals.js — 訊號可用性：每日輪替 + 環境條件加權（v3，浮現多個）
+// 決定「此刻感知能浮現哪幾個異常印象」。全程不需移動，GPS 只用於環境（time/weather/date）。
+//
+// 用法（Map.jsx 感知時）：
+//   import { fetchImpressions, fetchOwnedFragmentIds } from '../lib/signals'
+//   const ownedIds = await fetchOwnedFragmentIds(playerId)
+//   const impressions = await fetchImpressions(env, { ownedIds, n: 3 })
+//   // impressions: [{ fragment, atmosphere }]，浮現 2-3 個，玩家選一個深入，其餘淡掉
+//
+// 兩層設計：
+//   1. 每日輪替（硬門檻）：當天本地日期當種子，決定今天哪幾隻鬼在線上。一整天固定。
+//   2. 環境加權（軟）：玩家當下 time/weather/date 對上碎片條件 → 訊號強；不符 → 很弱但仍可能浮現。
 import { supabase } from './supabase'
 
-// ── 參數 ────────────────────────────────────────────
-export const DAILY_ROSTER_SIZE = 6        // 每天固定幾隻鬼在線
-export const COND_FACTOR = { match: 3, neutral: 1, mismatch: 0.25 }
-export const OWNED_FACTOR = 0.15          // 已持有碎片降低出現權重
-
-// ── 工具 ────────────────────────────────────────────
-
-// Deterministic position on frequency band (5–93%), based on fragment id
-export function fragPos(id) {
-  const num = parseInt(id.replace(/-/g, '').slice(0, 8), 16)
-  return 5 + (num % 88)
+// ── 可調參數 ──────────────────────────────────────────────
+export const DAILY_ROSTER_SIZE = 6   // 每天有幾隻鬼在線上
+export const IMPRESSION_COUNT = 3     // 每次感知浮現幾個印象
+const COND_FACTOR = {
+  neutral: 1,      // 條件為 NULL：常駐
+  match: 3,        // 條件吻合：訊號增強
+  mismatch: 0.25,  // 條件不吻合：很弱但非零
 }
+const OWNED_FACTOR = 0.15  // 已持有碎片大幅降權（設 0 則完全排除）
 
-// Seeded pseudo-random [0,1) from a string seed + index
-function seededRand(seed, index) {
+// ── 本地日期種子 ─────────────────────────────────────────
+function localDateKey(date = new Date()) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+function dateSeed(date = new Date()) {
+  const key = localDateKey(date)
   let h = 0
-  const s = `${seed}:${index}`
-  for (let i = 0; i < s.length; i++) h = Math.imul(31, h) + s.charCodeAt(i) | 0
-  return (h >>> 0) / 0xFFFFFFFF
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0
+  return h
+}
+function seededRandom(seed) {
+  let a = seed >>> 0
+  return () => {
+    a |= 0; a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+function seededShuffle(arr, rand) {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
 }
 
-// Today's date key used as roster seed (YYYY-M-D)
-function todayKey() {
-  const d = new Date()
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
+// ── 條件 → 倍率 ──────────────────────────────────────────
+function condFactor(cond, envValue) {
+  if (cond == null) return COND_FACTOR.neutral
+  return cond === envValue ? COND_FACTOR.match : COND_FACTOR.mismatch
 }
-
-// Pick daily roster: deterministic subset of allIds, stable for the day
-function getDailyRoster(allIds) {
-  const key = todayKey()
-  const scored = allIds.map((id, i) => ({ id, score: seededRand(key, i) }))
-  scored.sort((a, b) => b.score - a.score)
-  return new Set(scored.slice(0, DAILY_ROSTER_SIZE).map(s => s.id))
-}
-
-// Condition weight: null condition → neutral, match → high, mismatch → low
-function condWeight(frag, env) {
-  const factor = (cond, envVal) =>
-    cond == null         ? COND_FACTOR.neutral
-    : cond === envVal    ? COND_FACTOR.match
-    : COND_FACTOR.mismatch
-
+function fragmentWeight(frag, env) {
   return (
-    factor(frag.time_condition,    env.time)         *
-    factor(frag.weather_condition, env.weather)      *
-    factor(frag.date_condition,    env.date ?? null)
+    condFactor(frag.time_condition, env.time) *
+    condFactor(frag.weather_condition, env.weather) *
+    condFactor(frag.date_condition, env.date)
   )
 }
 
-// ── 公開函式 ────────────────────────────────────────
+// ── 取此刻可浮現的訊號（加權清單）────────────────────────
+// 回傳 [{ fragment, weight }]，weight > 0
+export async function getAvailableSignals(env, { date = new Date(), ownedIds = [] } = {}) {
+  const { data: stories } = await supabase.from('stories').select('id')
+  if (!stories || stories.length === 0) return []
 
-// Get IDs of fragments the player already possesses (any copy counts)
+  const rand = seededRandom(dateSeed(date))
+  const rosterIds = seededShuffle(stories.map((s) => s.id), rand)
+    .slice(0, Math.min(DAILY_ROSTER_SIZE, stories.length))
+
+  const { data: frags } = await supabase
+    .from('story_fragments')
+    .select('id, story_id, layer, rarity, fragment_label, fragment_text, time_condition, weather_condition, date_condition')
+    .in('story_id', rosterIds)
+  if (!frags || frags.length === 0) return []
+
+  const owned = new Set(ownedIds)
+  return frags
+    .map((fragment) => {
+      let weight = fragmentWeight(fragment, env)
+      if (owned.has(fragment.id)) weight *= OWNED_FACTOR
+      return { fragment, weight }
+    })
+    .filter((s) => s.weight > 0)
+}
+
+// ── 加權抽 n 個不重複的碎片（盡量來自不同鬼，讓選擇更有差異）──
+export function pickSignals(signals, n = IMPRESSION_COUNT) {
+  const pool = [...signals]
+  const chosen = []
+  const usedStories = new Set()
+  while (chosen.length < n && pool.length > 0) {
+    let cands = pool.filter((s) => !usedStories.has(s.fragment.story_id))
+    if (cands.length === 0) cands = pool // 不同鬼不夠了，才允許同一隻的另一片
+    const total = cands.reduce((a, s) => a + s.weight, 0)
+    let r = Math.random() * total
+    let picked = cands[cands.length - 1]
+    for (const s of cands) { r -= s.weight; if (r <= 0) { picked = s; break } }
+    chosen.push(picked.fragment)
+    usedStories.add(picked.fragment.story_id)
+    pool.splice(pool.indexOf(picked), 1)
+  }
+  return chosen
+}
+
+// ── 高階：一次拿好「感知頁要顯示的 2-3 個印象」───────────
+// 回傳 [{ fragment, atmosphere }]；atmosphere 是各碎片隨機抽的一句現場感知
+export async function fetchImpressions(env, { ownedIds = [], n = IMPRESSION_COUNT, date = new Date() } = {}) {
+  const signals = await getAvailableSignals(env, { ownedIds, date })
+  const frags = pickSignals(signals, n)
+  if (frags.length === 0) return []
+
+  const ids = frags.map((f) => f.id)
+  const { data } = await supabase
+    .from('fragment_atmosphere')
+    .select('story_fragment_id, atmosphere_text')
+    .in('story_fragment_id', ids)
+
+  const byFrag = {}
+  for (const row of data || []) (byFrag[row.story_fragment_id] ||= []).push(row.atmosphere_text)
+
+  return frags.map((f) => {
+    const pool = byFrag[f.id] || []
+    const atmosphere = pool.length ? pool[Math.floor(Math.random() * pool.length)] : (f.fragment_text || '')
+    return { fragment: f, atmosphere }
+  })
+}
+
+// ── 玩家已持有碎片 id ─────────────────────────────────────
 export async function fetchOwnedFragmentIds(playerId) {
-  if (!playerId) return new Set()
   const { data } = await supabase
     .from('fragments')
     .select('story_fragment_id')
     .eq('player_id', playerId)
-  return new Set((data || []).map(r => r.story_fragment_id))
-}
-
-// Load available signals for the current environment.
-// Stable for the same (date, env) — call once on mount or after 重新感知.
-// Returns [{ id, fragment, position, weight, atmospheres }], sorted by weight desc.
-export async function getAvailableSignals(env, { playerId, ownedIds } = {}) {
-  // 1. All fragment IDs that have at least one scene
-  const { data: sceneRows } = await supabase
-    .from('fragment_scenes').select('story_fragment_id').gte('layer_index', 1)
-  const allIds = [...new Set((sceneRows || []).map(r => r.story_fragment_id))]
-  if (!allIds.length) return []
-
-  // 2. Hard filter: today's daily roster
-  const roster = getDailyRoster(allIds)
-  const rosterIds = allIds.filter(id => roster.has(id))
-  if (!rosterIds.length) return []
-
-  // 3. Load fragment metadata
-  const { data: frags } = await supabase
-    .from('story_fragments')
-    .select('id, layer, rarity, fragment_label, fragment_text, time_condition, weather_condition, date_condition')
-    .in('id', rosterIds)
-
-  // 4. Atmospheres in one batch
-  const { data: atms } = await supabase
-    .from('fragment_atmosphere').select('*').in('story_fragment_id', rosterIds)
-  const atmByFrag = {}
-  for (const a of atms || []) (atmByFrag[a.story_fragment_id] ||= []).push(a)
-
-  // 5. Compute weights; drop zero-weight
-  const owned = ownedIds instanceof Set ? ownedIds : new Set(ownedIds || [])
-  const signals = []
-  for (const frag of frags || []) {
-    let w = condWeight(frag, env)
-    if (owned.has(frag.id)) w *= OWNED_FACTOR
-    if (w <= 0) continue
-    signals.push({
-      id: frag.id,
-      fragment: frag,
-      position: fragPos(frag.id),
-      weight: w,
-      atmospheres: atmByFrag[frag.id] || [],
-    })
-  }
-
-  return signals.sort((a, b) => b.weight - a.weight)
-}
-
-// Weighted-random pick of one signal from the list.
-// Returns the fragment object, or null if list is empty.
-export function pickSignal(signals) {
-  if (!signals || signals.length === 0) return null
-  const total = signals.reduce((s, sig) => s + sig.weight, 0)
-  if (total <= 0) return signals[0].fragment
-  let r = Math.random() * total
-  for (const sig of signals) {
-    r -= sig.weight
-    if (r <= 0) return sig.fragment
-  }
-  return signals[signals.length - 1].fragment
+  return (data || []).map((r) => r.story_fragment_id)
 }

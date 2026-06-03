@@ -2,13 +2,13 @@
 
 ## 專案概述
 
-推理型都市傳說收藏 PWA 手遊。玩家用「靈異收音機」調頻感知此地的異常訊號、收集鬼怪留下的痕跡碎片、組合封存，解鎖鬼怪筆記本。
+推理型都市傳說收藏 PWA 手遊。玩家翻開調查筆記「感知」此地，紙上滲出幾道異常印象，選一道深入、收集鬼怪留下的痕跡碎片，組合封存，解鎖鬼怪筆記本。
 
-碎片是玩家親身走過敘事場景後帶回來的文字片段。玩家從頭到尾都站在現場，收音機是把「已經和你共處一室、但隱形的存在」調進你能感知的頻段的工具，而不是遠端廣播。同一片碎片可以透過不同的敘事路徑取得，玩家靠記憶和感知判斷哪些碎片屬於同一個鬼怪，湊齊後封存。
+碎片是玩家親身走過敘事場景後帶回來的文字片段。玩家從頭到尾都站在現場，感知是把「已經和你共處一室、但隱形的存在」浮上紙面的能力。同一片碎片可以透過不同的敘事路徑取得，玩家靠記憶和感知判斷哪些碎片屬於同一個鬼怪，湊齊後封存。
 
-**遊戲重心**：調頻感知是氛圍入口（不是難關）；真正的玩法在碎片收集與筆記本封存（收集鬼怪）。探查的小張力來自「訊號清晰度」，長期目標是把同一隻鬼的碎片湊齊、封存成鬼怪志。
+**遊戲重心**：感知是氛圍入口（不是難關）；真正的玩法在碎片收集與筆記本封存（收集鬼怪）。探查的小張力來自「訊號清晰度」，長期目標是把同一隻鬼的碎片湊齊、封存成鬼怪志。
 
-探查沒有「正確答案」。每一步選擇影響訊號清晰度（訊號格），靠讀當下的氛圍憑第六感判斷，撐住訊號就拿得到碎片，讓訊號散掉就空手。
+探查沒有「正確答案」。每一步選擇影響訊號清晰度（訊號格），靠讀當下氛圍憑第六感判斷，撐住訊號就拿得到碎片，讓訊號散掉就空手。
 
 GDD 完整文件：`paranormal-notebook-gdd.md`
 
@@ -66,14 +66,13 @@ src/
 │   └── useNotebooks.js 筆記本 + 碎片 CRUD + 封存邏輯
 ├── lib/
 │   ├── supabase.js     Supabase client
-│   ├── weather.js      Open-Meteo + 時辰/節日判斷（調頻訊號的出沒條件來源）
-│   ├── signals.js      訊號可用性：每日輪替 + 條件加權 + pickSignal 加權隨機挑一
+│   ├── weather.js      Open-Meteo + 時辰/節日判斷（感知印象的出沒條件來源）
+│   ├── signals.js      訊號可用性：每日輪替 + 條件加權，決定此刻感知能浮現哪幾個印象
 │   └── exploration.js  探查邏輯：載入層、抽選項、累加訊號格、結算、分層結局
 └── pages/
     ├── Auth.jsx        登入（Google OAuth + Email OTP 兩步驟）
     ├── SetupName.jsx   首次登入設定調查員名稱（一次性）
-    ├── Map.jsx         調頻盤純 UI 元件（props: env, playerId, onDeepDive）
-    ├── MapRoute.jsx    /map 路由包裝層：計算 env、管理 overlay/notebook、接線 Map ↔ ExplorationOverlay
+    ├── Map.jsx         感知主頁（筆記感知頁，非地圖；檔名暫留 Map.jsx）
     ├── NotebookPage.jsx 筆記本管理（FragmentCard 預設折疊，點擊展開完整敘事）
     ├── BookshelfPage.jsx 封存書架
     └── ShopPage.jsx    協會（玩家資訊、補給站、帳號管理）
@@ -83,329 +82,220 @@ src/
 
 - **手機優先**：`#root` `max-width: 600px` 居中，`width: 100%` 確保手機全寬；桌面/平板兩側填 `#000` 純黑
 - **基礎字體**：`body font-size: 15px`；標籤用 `text-xs`(12px)，內文用 `text-sm`(14px)
-- **Safe area**：`#root` 有 `padding-top: env(safe-area-inset-top)` 適配瀏海/動態島；BottomNav 有 `padding-bottom: env(safe-area-inset-bottom)` 適配 Home Bar
-- **動畫原則**：極少、極慢；禁止彈跳；只用 fadeIn / pulse / typewriter
-- **導航列配色**：BottomNav 未選中 `text-muted`，hover `text-ink`，選中 `text-accent`；TopBar 等級標籤 `text-muted`；靈力空格 `muted/40`
+- **Safe area**：`#root` 有 `padding-top: env(safe-area-inset-top)`；BottomNav 有 `padding-bottom: env(safe-area-inset-bottom)`
+- **動畫原則**：極少、極慢；禁止彈跳；只用 fadeIn / pulse / typewriter（感知頁墨痕用 blur→clear 的滲出）
 - **靈異主題色**：深黑底 `#080604`、暖金 `#c9b99a`、CRT scanlines、灰白冷光
 
 ## 核心機制說明
 
 ### 靈力計算（useStamina.js）
 
-靈力取代舊的體力，機制不變，純前端時間差，不跑後端排程：
+靈力取代舊的體力，純前端時間差，不跑後端排程：
 ```
 current = min(10, stored + floor((now - updated_at) / 8分鐘))
 ```
-消耗時把 recovered 先加回再扣，更新 `stamina` + `stamina_updated_at`（欄位名暫留 stamina，UI 顯示為「靈力」）。
+消耗時把 recovered 先加回再扣，更新 `stamina` + `stamina_updated_at`（DB 欄位名暫留 stamina，UI 顯示為「靈力」）。
 
-**消耗規則**：一次探查只在玩家按〔通靈深入〕時扣 **1 格**。轉動調頻盤搜尋、對準訊號、看免費氛圍，全部免費。多層感知的選擇也不扣。
+**消耗規則**：一次探查只在玩家按〔通靈深入〕時扣 **1 格**。感知、浮現印象、預覽氛圍，全部免費。多層感知的選擇也不扣。
 
-### 封存判斷（useNotebooks.js `seal()`）
+### 感知頁互動（Map.jsx，筆記感知頁）
 
-1. 取出筆記本內所有碎片的 `story_fragment_id`
-2. 逐一比對所有故事的兩個層次（basic / lore）
-3. 若筆記本碎片完整包含某層次所有必要碎片 → 成功，解鎖 `creature_pages`，贈一本空白筆記本
-4. 失敗回饋三種文案：
-   - 碎片不足：「還有什麼沒被記下來」
-   - 有異鬼怪碎片：「這裡裝了不該裝的東西」
-   - 數量符合但組合錯：「似乎已經完整了，但有什麼不對」
+感知是唯一入口，取代舊的雷達/調頻。**氛圍導向，不是難關，沒有錯覺、不可能失敗。**選擇的重量來自「只能挑一個，其餘消失」。
 
-**基礎版封存**：集齊所有 `layer='basic'` 碎片 → 玩家探查敘事填入 `sealed_narrative` 骨架 → 生成「調查員的目擊側寫」，每個玩家版本不同
+- **畫面**：翻開的筆記頁（深黑 `#080604` + 紙面漸層 + 暖金）。頂端顯示環境（時辰 + 天氣 + 節日）。
+- **感知（免費）**：墨色滲開，紙上浮現 **2–3 道墨痕印象**，各一句 `fragment_atmosphere`（現場感知到的異常，如「暗巷裡似乎有人影」）。墨痕用 blur→clear 滲出、交錯延遲出現。
+- **選一道深入**：點一道墨痕 → **其餘墨痕淡掉（散回紙裡）** → 顯示〔通靈深入〕(−1 靈力) /〔重新感知〕。
+- **一次一個**：深入或放掉後 → 再感知，浮現新的一批。
+- **空頁**：環境沒有可浮現的印象時，顯示「今晚很安靜，紙上沒有浮現任何痕跡」。不懲罰，換時機再來。
+- **沒有錯覺**：浮現的都是真的碎片；選擇的張力來自機會成本（挑一個、放掉其餘），不是「白工」。
+- 視覺用 inline style，不依賴 Tailwind 設定。
 
-**鬼怪志版封存**：集齊所有 `layer='basic'` + `layer='lore'` 碎片 → 直接存入 `lore_narrative` 固定文字 → 生成「鬼怪的完整檔案」（樣貌、起源、能力），固定內容
+### 訊號出沒規律與每日輪替（signals.js）
 
-### 調頻盤互動（Map.jsx）
+決定「此刻感知能浮現哪幾個印象」。**全程不需移動**，GPS 只用於環境。
 
-收音機調頻是唯一的感知入口。**調頻是氛圍與儀式，不是難關，不可能失敗。**
-
-- **畫面**：深黑底 + CRT scanlines；一條水平頻帶、一根可拖指針、頂端顯示環境（時辰 + 天氣 + 節日）與 GPS 座標（純調味）。
-- **搜尋（拖指針，免費）**：接近訊號隱藏點時雜訊變薄、波形聚攏。訊號有「吸附寬度」，靠近即高亮，不需對到像素級。SNAP 9% / LOCK 4%。
-- **鎖定（放開指針，免費）**：在 LOCK zone 內放開 → `isHolding=true` → `fragment_atmosphere` 以打字機逐字浮現；再次拖動取消鎖定。
-- **接通後**：氛圍文字打字機顯示 → 玩家選〔通靈深入〕(−1 靈力) 或放掉 → 重調。
-- **空台**：無可用訊號時顯示「今晚很安靜，沒有什麼接通得了」。
-- **自動掃描**：慢掃、碰到訊號自停，鎖定一樣要穩住。
-
-**元件架構**（`Map.jsx` ↔ `MapRoute.jsx`）：
-- `Map.jsx`：純 UI 元件（props: `env / playerId / onDeepDive`）。自行呼叫 `getAvailableSignals` + `pickSignal` 決定本輪訊號；鎖定後點〔通靈深入〕→ `onDeepDive(fragment)`。
-- `MapRoute.jsx`：/map 路由包裝。計算 `env`、管理 ExplorationOverlay + NotebookSelectModal。接到 `onDeepDive` 後開 `ExplorationOverlay(startScene=true)`，overlay 自動扣靈力 → 進場景。探查結束後 `scanKey++` → Map remount → 新一輪掃描。
-- `ExplorationOverlay` 的 `startScene=true`：mount 時自動呼叫 `handleDeepen`，跳過 atmosphere 階段（Map 已顯示過）。
-
-### 訊號出沒規律（signals.js）
-
-決定「此刻調頻能掃到誰」。**全程不需移動**，GPS 只用於環境條件。
-
-- **每日輪替**：用當天日期當種子（`YYYY-M-D` hash），從所有有場景的碎片中選出 `DAILY_ROSTER_SIZE=6` 隻鬼作為今日名單（硬門檻）。一整天固定，隔天換一批。
-- **條件加權**：`time_condition` / `weather_condition` / `date_condition` 對上當前環境，吻合 ×3、NULL（無條件）×1、不吻合 ×0.25。三個乘起來決定最終 `weight`。
-- **已持有降權**：玩家已持有該碎片的任意一份 → 再乘以 `OWNED_FACTOR=0.15`，讓玩家不會一直撞到同一片。
-- **穩定性**：同一（日期 + 環境）重掃是同一批候選（不 reroll）；〔重新感知〕才換一批（唯一對搜尋收費的動作）。
-- **`fragPos(id)`**：以 fragment.id 的前 8 位 hex hash 決定訊號在頻帶上的固定位置（5–93%），穩定不變。
-
-### 感知 / 調頻流程（Map.jsx + ExplorationOverlay.jsx）
-
-```
-轉動調頻盤搜尋（免費）
-  ※ 環境（時辰/天氣/節日，來自 weather.js）決定此刻頻帶上有哪些訊號
-  ※ 訊號 = 候選碎片，由 story_fragments 的條件對上目前環境篩出
-→ 對準某個訊號（免費）→ 顯示氛圍描述（從 fragment_atmosphere 隨機抽）
-  ※ 氛圍是玩家站在現場感知到的異常（看到/聽到/感覺到），不描述進入後的事
-→ 玩家選擇：放掉（之後再找）或〔通靈深入〕(−1 靈力)
-→ 通靈深入 → 進入多層感知（才是現場遭遇）
-→ 每層：一個場景 + 抽 3 個選項 → 選擇 → 顯示 result_text + 調整訊號格
-→ 結算：
-   訊號格歸 0 → 存在散去（失敗，空手）
-   撐到最後一層且格數 ≥ 1 → FragmentReveal 過渡（約 3.5s）→ NotebookSelectModal → 放入碎片
-```
-
-**關鍵設計決策**：
-- 探查邏輯全部集中在 `lib/exploration.js`，ExplorationOverlay 只負責驅動與顯示（見下節）
-- 沒有「事後 25% 什麼都沒有」的 RNG，風險全在訊號格
-- 沒有收手鍵（成本是單筆固定一格，沒有越陷越深的問題）；可選擇保留純敘事的「停止」鈕，但不存不扣任何東西
-- `loadInvestigation` 回傳 `layers.length === 0` 時當失敗處理（內容缺場景/選項），不給碎片
-- Overlay 用 `fixed inset-0 z-[2000]`（全螢幕暗色）+ 內容 `max-w-[600px] mx-auto`，桌面版文字正確置中；z-2000 確保手機上不被任何元素壓住
-- **FragmentReveal**（`z-[2100]`）：撐到最後一層成功後顯示的過渡畫面。黑底 `#080604`，依 rarity/layer 顯示不同顏色的 fragment_label 打字機效果（common=#c8c0b8、rare=#b8c8e0、lore=#c8a84a），lore 碎片中途額外暫停 600ms；打字完成後字跡抖動（opacity 1→0.3→1，80ms），再 +300ms 顯示 fragment_text，+1200ms 後進入 NotebookSelectModal
-- 玩家可用右上角 `A-` / `A+` 調整探查文字字體大小（4 級：xs/sm/base/lg），存 `localStorage` key `ghostnote_font_size`；文字用 `break-words` + `overflow-y-auto` 確保大字不橫向溢出
+- **每日輪替**：當天本地日期當種子，決定今天哪幾隻鬼在線上放送（一整天固定，學得會「今天有誰」；隔天換一批）。種子是確定性的，**同一天每個玩家 roster 相同**，不需伺服器。
+- **條件加權（軟）**：玩家當下 time/weather/date（weather.js）對 `story_fragments` 的條件 → 吻合 ×3、NULL ×1、不吻合 ×0.25。不歸零，錯的時機仍可能浮現，收集不卡死。
+- **已持有降權**：玩家已有的碎片 ×0.15，新碎片自然壓過重複的。
+- **浮現多個**：`pickSignals` 加權抽 2–3 個不重複碎片（盡量來自不同鬼）；`fetchImpressions` 一次回傳 `[{ fragment, atmosphere }]` 給感知頁。
 
 ### 探查邏輯（lib/exploration.js，訊號清晰度模型）
 
-`scene_options` 不再有對錯，改為每個選項帶一個 `signal_delta`（訊號格增減）。模組提供三個函式：
+`scene_options` 不再有對錯，改為每個選項帶一個 `signal_delta`（訊號格增減）。模組函式：
 
 ```javascript
 import { loadInvestigation, applyChoice, getEnding, buildNarrative } from '../lib/exploration'
 
-// 通靈深入時：載入一次探查的所有層
 const inv = await loadInvestigation(fragment) // { startClarity, layers: [...] }
-let clarity = inv.startClarity
-let i = 0
+let clarity = inv.startClarity, i = 0
 const walked = []
 
-// 玩家點某層某選項：
-const r = applyChoice(
-  { clarity, layerIndex: i, totalLayers: inv.layers.length },
-  option
-)
+const r = applyChoice({ clarity, layerIndex: i, totalLayers: inv.layers.length }, option)
 clarity = r.clarity
 walked.push({ sceneText: inv.layers[i].sceneText, resultText: r.resultText })
-// 顯示 r.resultText + 更新訊號格動畫
 if (r.outcome === 'faded')    { /* 存在散去畫面 */ }
 if (r.outcome === 'fragment') {
-  const ending = getEnding(inv.layers[i], r.tier) // 分層結局收尾文字
+  const ending = getEnding(inv.layers[i], r.tier)
   /* 顯示 ending → FragmentReveal → NotebookSelectModal，存 buildNarrative(walked) */
 }
-if (r.outcome === 'continue') { i++ /* 顯示下一層 */ }
+if (r.outcome === 'continue') { i++ }
 ```
 
 **訊號格（清晰度）規則**：
 
 - **範圍** 0–5，clamp（不超過 `CLARITY_MAX`，不低於 0）
 - **起始格數** 依碎片 layer：`START_CLARITY = { basic: 3, lore: 2 }`
-- **層數** 由 `fragment_scenes` 的 `layer_index` 實際數量決定（內容上 normal=3、rare=4、legendary=5）
-- **每個選項 signal_delta** 只有四種值：`+1 / 0 / −1 / −2`（刻意不對稱：最好 +1，最差 −2，容易斷、難回升）
-- **每層抽 3 個選項**：判斷層保證「至少 1 個 delta ≥ 0（活路）+ 至少 1 個 delta < 0（錯步）」，其餘隨機，隨機排序
-- **結算三出口**：`continue`（下一層）、`faded`（格數歸 0，存在散去）、`fragment`（撐到最後一層且 ≥1）。`faded` 優先——最後一層選到歸 0 也是散去，不是拿到碎片
+- **層數** 由 `fragment_scenes` 的 `layer_index` 數量決定（normal 3 / rare 4 / legendary 5）
+- **每個選項 signal_delta** 只有 `+1 / 0 / −1 / −2`（刻意不對稱：最好 +1、最差 −2）
+- **每層抽 3 個選項**：判斷層保證「至少 1 個 ≥0（活路）+ 至少 1 個 <0（錯步）」，隨機排序
+- **結算三出口**：`continue` / `faded`（歸 0 散去）/ `fragment`（最後一層 ≥1）。`faded` 優先
 - **每次探查重置**，格數不跨碎片累積
 
-**分層結局（v2）**：
+**分層結局**：最後一層成功後依剩餘格數顯示收尾，`tier='high'`（≥`HIGH_TIER_MIN`=4 格，乾淨接通）/ `'low'`（1–3 格，差點斷線）。`applyChoice` 在 `fragment` 時回傳 `tier`；`getEnding(lastLayer, tier)` 取 `ending_high`/`ending_low`。**碎片本身與 tier 無關**，只換收尾氛圍。
 
-- 最後一層成功後，依剩餘格數顯示不同收尾：`tier='high'`（≥ `HIGH_TIER_MIN=4` 格，乾淨接通）/ `tier='low'`（1–3 格，差點斷線）。
-- `applyChoice` 在 `outcome==='fragment'` 時回傳 `tier`；`getEnding(lastLayer, tier)` 取對應的 `ending_high` / `ending_low` 文字。
-- **碎片本身與 tier 無關**，high/low 拿到的碎片完全相同；分層只換一句收尾氛圍。內容缺 ending 欄位時 `getEnding` 回 `''`，UI 省略。
+**is_skippable**：該層所有選項 `signal_delta` 都是 0（純氛圍鋪陳）。basic 第 1 層可 true；**lore 碎片所有層必須 false**。
 
-**is_skippable 的新意義**：該層所有選項 `signal_delta` 都是 0（純氛圍鋪陳，不動格數）。basic 碎片第 1 層可設 true；**lore 碎片所有層必須 false**。
+> ℹ️ `loadInvestigation` 會挑該層「有選項的場景」，同層多場景也不會壞。
 
-> ℹ️ `loadInvestigation` 會挑該層「有選項的場景」，所以即使同層放多個場景也不會壞（修掉了舊版隨機抽到無選項場景就整個失敗的雷）。若要恢復 GDD 原本的多場景池（防記答案），直接多加場景即可。
+### 感知 / 探查完整流程
+
+```
+感知（免費）
+  ※ signals.js：每日輪替 + 環境加權 → fetchImpressions 回傳 2-3 個 { fragment, atmosphere }
+→ 紙上浮現 2-3 道墨痕印象（各一句現場感知）
+→ 選一道深入：點一道 → 其餘淡掉 → 〔通靈深入〕(−1 靈力) 或〔重新感知〕
+→ 通靈深入 → 進入多層感知（現場遭遇）
+→ 每層：一個場景 + 抽 3 個選項 → 選擇 → result_text + 調整訊號格
+→ 結算：
+   訊號格歸 0 → 存在散去（失敗，空手）
+   撐到最後一層且 ≥1 → getEnding 收尾 → FragmentReveal → NotebookSelectModal → 放入碎片
+```
+
+**Overlay / 過渡技術細節**：
+- Overlay `fixed inset-0 z-[2000]` + 內容 `max-w-[600px] mx-auto`
+- **FragmentReveal**（`z-[2100]`）：成功後過渡。黑底 `#080604`，依 rarity 顯示不同顏色 fragment_label 打字機（common=#c8c0b8、rare=#b8c8e0、lore=#c8a84a），lore 中途暫停 600ms；打完抖動（opacity 1→0.3→1，80ms），+300ms 顯示 fragment_text，+1200ms 進 NotebookSelectModal
+- 右上角 `A-` / `A+` 調探查字級（4 級），存 `localStorage` key `ghostnote_font_size`
+
+### 封存判斷（useNotebooks.js `seal()`）
+
+1. 取筆記本內所有碎片的 `story_fragment_id`
+2. 逐一比對所有故事的 basic / lore 兩層次
+3. 完整包含某層次所有必要碎片 → 成功，解鎖 `creature_pages`，贈空白筆記本
+4. 失敗回饋：碎片不足／含異鬼怪碎片／數量符合但組合錯
+
+**基礎版**：集齊所有 `layer='basic'` → 玩家探查敘事填入 `sealed_narrative` 骨架（每人不同）
+**鬼怪志版**：集齊 `basic` + `lore` → 存入 `lore_narrative` 固定文字
 
 ### 鬼怪等級與探查層數
 
-| stories.difficulty | 基礎版碎片 | 鬼怪志碎片 | 探查層數 | 起始訊號格（依碎片 layer） |
-|-------------------|-----------|-----------|---------|--------------------------|
-| `normal`          | 4-6 片    | +2-3 片   | 3 層    | basic 3 / lore 2 |
-| `rare`            | 7-9 片    | +4-5 片   | 4 層    | basic 3 / lore 2 |
-| `legendary`       | 10-13 片  | +5-6 片   | 5 層    | basic 3 / lore 2 |
-
-層數越多越難（要連續更多層不斷線）；嚴格度由碎片 layer 決定（lore 起始格少、每層都是判斷層）。
+| difficulty | 基礎版碎片 | 鬼怪志碎片 | 探查層數 | 起始訊號格 |
+|-----------|-----------|-----------|---------|-----------|
+| `normal`  | 4-6 片    | +2-3 片   | 3 層    | basic 3 / lore 2 |
+| `rare`    | 7-9 片    | +4-5 片   | 4 層    | basic 3 / lore 2 |
+| `legendary` | 10-13 片 | +5-6 片   | 5 層    | basic 3 / lore 2 |
 
 ### 碎片分類
 
 | layer | rarity | 說明 | 探查體驗 | 封存用途 |
 |-------|--------|------|----------|----------|
-| basic | common | 一般遭遇，看到蹤跡與異常現象 | 起始 3 格，第 1 層可為氛圍層 | 基礎版筆記本 |
-| basic | rare | 稀有遭遇，更強烈的異常現象 | 起始 3 格 | 基礎版筆記本 |
-| lore | rare | 直接遭遇鬼怪本體，看清楚樣子 | 起始 2 格，所有層皆為判斷層，最易斷線 | 鬼怪志版筆記本（必要條件） |
+| basic | common | 蹤跡與異常現象 | 起始 3 格，第 1 層可為氛圍層 | 基礎版筆記本 |
+| basic | rare | 更強烈的異常現象 | 起始 3 格 | 基礎版筆記本 |
+| lore | rare | 直接遭遇鬼怪本體 | 起始 2 格，所有層皆判斷層，最易斷線 | 鬼怪志版（必要） |
 
 ### Auth 流程
+- **Google**：`signInWithOAuth({ provider:'google' })` → 跳轉回 origin
+- **Email OTP**：`signInWithOtp({email})` → 6 位碼 → `verifyOtp({email,token,type:'email'})`
 
-- **Google**：`signInWithOAuth({ provider: 'google' })` → 跳轉回 `window.location.origin`
-- **Email OTP**：`signInWithOtp({ email })` → 寄送 6 位驗證碼 → `verifyOtp({ email, token, type:'email' })`
-
-### 首次登入名稱設定（SetupName.jsx）
-
-`usePlayer` 建立新玩家時 `display_name` 預設為空字串 `''`，並設 `isNew = true`。
-`App.jsx` 在 player 存在但 `isNew` 為 true 時，攔截路由顯示 `SetupName` 頁面。
-玩家輸入名稱 → `updateName()` 寫入 DB → `setIsNew(false)` → 進入遊戲。
-
-> Supabase `players.display_name` 欄位需允許空字串：
-> ```sql
-> ALTER TABLE players ALTER COLUMN display_name SET DEFAULT '';
-> ```
+### 首次登入名稱（SetupName.jsx）
+新玩家 `display_name` 預設 `''`、`isNew=true`；App.jsx 攔截顯示 SetupName → `updateName()` → `setIsNew(false)`。
+> `ALTER TABLE players ALTER COLUMN display_name SET DEFAULT '';`
 
 ### 新增故事內容
-
-使用 `content-generation-prompt.md` 模板給 AI 生成 SQL，依序插入：
-
-1. `stories` — 含 `sealed_narrative`（基礎版骨架，`{fragment_label}` 佔位符）、`lore_narrative`（鬼怪志固定文字）、`image_slug`
-2. `story_fragments` — 含 `fragment_label`、`fragment_text`、`layer`、`rarity`、環境條件
-3. `fragment_atmosphere` — 每片碎片 3-5 條；**玩家站在現場感知到的異常，不描述進入後的事**
-4. `fragment_scenes` — 每片碎片**每層恰好 1 個場景**，含 `is_skippable`；場景內容是進入後的遭遇
-5. `scene_options` — 每個選項給 `signal_delta`（判斷層保證有 delta≥0 與 delta<0 的選項）+ `result_text`（選後顯示的氛圍）
-
-> ⚠️ 沒有 `fragment_scenes.layer_index >= 1` 記錄的碎片不會出現在訊號候選中。
-> ⚠️ `is_skippable=true` 層的所有選項 `signal_delta` 必須是 0。lore 碎片所有層必須 `is_skippable=false`。
+用 `content-generation-prompt.md` 模板，依序：stories → story_fragments（含**出沒條件**）→ fragment_atmosphere（現場感知）→ fragment_scenes（每層 1 場景、含 is_skippable，**最後一層填 ending_high/ending_low**）→ scene_options（signal_delta + result_text，判斷層保證有 delta≥0 與 <0）。
 
 ## 資料庫 Schema（關鍵表格）
 
 ### stories
 ```sql
-id UUID, title TEXT,
-difficulty TEXT,          -- 'normal'|'rare'|'legendary'
-creature_type TEXT,
-creature_description TEXT,
-sealed_narrative TEXT,    -- 基礎版故事骨架，含 {fragment_label} 佔位符
-lore_narrative TEXT,      -- 鬼怪志版固定故事（樣貌、起源、能力）
-image_slug TEXT           -- 鬼怪圖片短名，對應 public/creatures/{image_slug}.webp
+id UUID, title TEXT, difficulty TEXT, creature_type TEXT, creature_description TEXT,
+sealed_narrative TEXT,  -- 含 {fragment_label} 佔位符
+lore_narrative TEXT, image_slug TEXT
 ```
-
-### 鬼怪圖片規格
-- 位置：`public/creatures/{image_slug}.webp`
-- 尺寸：600 × 800 px（直式）
-- 格式：WebP，< 120 KB
-- 畫風：水墨插畫風，深黑背景（#080604），灰白冷光主體 + 暖金線條，帶汙漬老化感
-- basic 層顯示時加深色遮罩（opacity-50 + 黑色 40% overlay）；lore 層較清晰（opacity-90）
-- 底部漸層淡出至 `#1e1e1e`（card 背景色），自然融入內容
 
 ### story_fragments
 ```sql
-id UUID, story_id UUID,
-layer TEXT,               -- 'basic'|'lore'
-rarity TEXT,              -- 'common'|'rare'
-fragment_label TEXT,      -- 痕跡標籤（短）→ sealed_narrative 佔位符對應
-fragment_text TEXT,       -- 痕跡描述（一句話）
-time_condition TEXT, weather_condition TEXT, date_condition TEXT,  -- 調頻訊號的篩選條件
+id UUID, story_id UUID, layer TEXT, rarity TEXT,
+fragment_label TEXT, fragment_text TEXT,
+time_condition TEXT, weather_condition TEXT, date_condition TEXT,  -- 出沒規律（軟加權）
 motif_tags TEXT[] DEFAULT '{}', is_user_submitted BOOLEAN DEFAULT false
 ```
 
 ### fragment_atmosphere
 ```sql
-id UUID, story_fragment_id UUID,
-atmosphere_text TEXT
--- 玩家站在現場感知到的異常，第一人稱，2-3句
--- 例：「廢棄大樓五樓透著燈光，但這棟樓停電三年了」
--- 玩家據此決定要不要通靈深入，不描述進入後的事
+id UUID, story_fragment_id UUID, atmosphere_text TEXT  -- 現場感知到的異常，2-3句
 ```
 
-### fragment_scenes
+### fragment_scenes（含分層結局欄位）
 ```sql
-id UUID, story_fragment_id UUID,
-layer_index INTEGER,      -- 1開始，每層恰好 1 個場景（多個場景可共用同層，防記答案）
-atmosphere_text TEXT,     -- 進入現場後的遭遇敘事（構成 exploration_narrative）
-is_skippable BOOLEAN,     -- true=該層所有選項 delta=0（僅 basic）；false=判斷層（lore 全部 false）
-ending_high TEXT,         -- 最後一層成功且 tier='high' 時顯示的收尾文字（null=省略）
-ending_low  TEXT          -- 最後一層成功且 tier='low' 時顯示的收尾文字（null=省略）
+id UUID, story_fragment_id UUID, layer_index INTEGER,
+atmosphere_text TEXT, is_skippable BOOLEAN,
+ending_high TEXT,  -- 分層結局：≥4 格成功的收尾（只有最後一層填）
+ending_low TEXT    -- 分層結局：1–3 格成功的收尾（只有最後一層填）
 ```
 
-### scene_options（已改版）
+### scene_options（訊號清晰度版）
 ```sql
-id UUID, scene_id UUID,
-text TEXT,
-signal_delta SMALLINT,    -- -2 ~ +1，選後對訊號格的增減
-result_text TEXT          -- 選後顯示的一句氛圍（訊號穩住 / 開始散 / 它退了一步…）
+id UUID, scene_id UUID, text TEXT,
+signal_delta SMALLINT,  -- -2 ~ +1
+result_text TEXT        -- 選後一句氛圍（局部變化，非終局）
 ```
 
-### fragments（玩家持有）
+### fragments / notebooks / creature_pages
 ```sql
-id UUID, player_id UUID, story_fragment_id UUID,
-notebook_id UUID,
-player_tag TEXT,
-exploration_narrative TEXT,  -- 玩家走過的場景敘事串聯（buildNarrative）
-obtained_at TIMESTAMPTZ
+fragments(id, player_id, story_fragment_id, notebook_id, player_tag, exploration_narrative, obtained_at)
+notebooks(id, player_id, name, capacity=15, type='personal', status='active'|'sealed', sealed_at, story_id, sealed_layer, sealed_story)
+creature_pages(id, player_id, story_id, unlocked_layer, obtained_at)
 ```
 
-### notebooks
-```sql
-id UUID, player_id UUID, name TEXT,
-capacity INTEGER DEFAULT 15,
-type TEXT DEFAULT 'personal',
-status TEXT DEFAULT 'active',  -- 'active'|'sealed'
-sealed_at TIMESTAMPTZ, story_id UUID,
-sealed_layer TEXT,             -- 'basic'|'lore'
-sealed_story TEXT              -- 封存後生成的完整故事
-```
-
-### creature_pages
-```sql
-id UUID, player_id UUID, story_id UUID,
-unlocked_layer TEXT,      -- 'basic'|'lore'
-obtained_at TIMESTAMPTZ
-```
+### 鬼怪圖片規格
+`public/creatures/{image_slug}.webp`；600×800 直式；WebP < 120 KB；水墨深黑底 #080604 + 暖金線條 #c9b99a。basic 加深色遮罩、lore 較清晰。
 
 ## AI 生成故事 SQL 的鐵則
+1. 合法 UUID（只含 `[0-9a-f]`，`g/l/o/s/w` 等非 hex 會 INSERT 失敗）；**只有 stories / story_fragments 用固定 UUID**，其餘 `gen_random_uuid()`
+2. difficulty/layer/rarity 用合法列舉；signal_delta 只 `-2~1`
+3. fragment_atmosphere 只描述現場感知；遭遇寫在 fragment_scenes
+4. 判斷層選項池同時有 delta≥0 與 <0；is_skippable 層全 0；每選項都有 result_text
+5. **最後一層填 ending_high/ending_low；非最後一層 NULL**
+6. 想要出沒規律就填 time/weather/date 條件（多數 common 留 NULL）
+7. sealed_narrative 佔位符對齊 fragment_label；lore_narrative 不含佔位符；單引號用 `''` 跳脫
 
-使用 `content-generation-prompt.md` 作為模板。關鍵規則：
-
-1. **所有 id 必須是合法 UUID 格式**，每個不同；UUID 只能含 `[0-9a-f]`，`l`、`o`、`g` 等非 hex 字元會導致 INSERT 靜默失敗
-2. **stories.difficulty** 只能填 `'normal'`、`'rare'`、`'legendary'`
-3. **story_fragments.layer** 只能填 `'basic'`、`'lore'`；**rarity** 只能填 `'common'`、`'rare'`
-4. **story_fragments 用 `fragment_label` + `fragment_text`**（不是舊的 `difficulty` / `text`）
-5. **fragment_scenes 必須包含 `is_skippable`**（basic 第一層可 true；lore 全部 false）
-6. **fragment_atmosphere 只描述現場感知到的異常**，不描述進入後的事；進入後的遭遇寫在 fragment_scenes
-7. **scene_options 每個選項給 `signal_delta`（−2~+1）+ `result_text`**；判斷層要同時有 delta≥0 與 delta<0 的選項；is_skippable 層所有選項 delta=0
-8. **三個選項都要極度合理**，靠感知判斷，不能有明顯該排除的
-9. **stories 必須包含 `image_slug`**（英文小寫+底線，不含副檔名）
-10. **sealed_narrative 的 `{佔位符}` 必須和 `fragment_label` 完全一致**；**lore_narrative 是固定文字**，不含佔位符
-11. **單引號用 `''` 跳脫**，不使用反斜線
-
-> ⚠️ **CTE 遷移陷阱**：PostgreSQL CTE snapshot 機制導致同一語句內 CTE 寫入的列對其他查詢不可見，必須透過 `RETURNING` 引用。每個場景用獨立 CTE：
+> ⚠️ CTE 陷阱：每個場景用獨立 CTE + `RETURNING`。最後一層帶 ending 欄位範例：
 > ```sql
 > WITH sc AS (
->   INSERT INTO fragment_scenes (id, story_fragment_id, layer_index, atmosphere_text, is_skippable)
->   VALUES (gen_random_uuid(), 'fragment-uuid', 1, '場景文字', false)
+>   INSERT INTO fragment_scenes (id, story_fragment_id, layer_index, atmosphere_text, is_skippable, ending_high, ending_low)
+>   VALUES (gen_random_uuid(), 'fragment-uuid', 3, '最終層場景', false, '乾淨收尾', '驚險收尾')
 >   RETURNING id
 > )
 > INSERT INTO scene_options (id, scene_id, text, signal_delta, result_text)
 > SELECT gen_random_uuid(), sc.id, v.text, v.signal_delta, v.result_text FROM sc
-> CROSS JOIN (VALUES
->   ('貼當下的選擇', 1, '訊號穩住了'),
->   ('突兀的選擇', -2, '訊號在你動作的瞬間散掉。')
-> ) AS v(text, signal_delta, result_text);
+> CROSS JOIN (VALUES ('貼當下的選擇',1,'訊號穩住了。'),('突兀的選擇',-2,'訊號散開。')) AS v(text,signal_delta,result_text);
 > ```
 
-### 已知鬼怪 image_slug 對照
-| 鬼怪 | image_slug |
-|------|-----------|
-| 屍鼠 | shushi |
-| 廁所花子 | hanako |
-| 新娘電梯 | elevator_bride |
-| 隔壁的鄰居 | neighbor |
-| 三樓的轉學生 | transfer_student |
-| 夜班的那個人 | night_shift |
+### 已知鬼怪 image_slug
+屍鼠 shushi｜廁所花子 hanako｜新娘電梯 elevator_bride｜隔壁的鄰居 neighbor｜三樓的轉學生 transfer_student｜夜班的那個人 night_shift｜最後一班的乘客 last_passenger｜三點十七分的同事 317_coworker｜對面的那個人 metro_stranger
 
-## 本次改版待實作（交給 Code）
+## 本次改版待實作（交給 Code，依序）
 
-✅ 全部完成（2026-06-02）：
+1. **跑 `005_signal_clarity.sql`**：改 scene_options 欄位 + 轉換資料。跑完補寫正確/skippable 選項的 `result_text`（目前空字串）。
+2. **跑 `006_tiered_ending.sql`**：fragment_scenes 加 `ending_high`/`ending_low`。為現有鬼怪最後一層補兩段收尾。
+3. **接 `lib/exploration.js`**：ExplorationOverlay 改用 `loadInvestigation`/`applyChoice`/`getEnding`/`buildNarrative`，移除舊 `is_correct`/`fail_text`/25% 誤判。新增訊號格 UI（0–5，隨 delta 動畫；歸 0 → 散去）。成功依 `tier` 顯示 `getEnding` 收尾再進 FragmentReveal。
+4. **接 `lib/signals.js`**：感知頁用 `fetchImpressions(env, { ownedIds })` 取 2-3 個印象。每日輪替 + 條件加權 + 已持有降權。
+5. **Map.jsx 改筆記感知頁**：移除雷達/調頻/`toScreen()`/anomaly-dot。改成感知 → 浮現 2-3 道墨痕印象（各一句 atmosphere）→ 點一道、其餘淡掉 → 〔通靈深入〕/〔重新感知〕。父層傳 `env`（weather.js）、`playerId`（usePlayer）、`onDeepDive(fragment)`（開 ExplorationOverlay 扣 1 靈力）。用法：`<Map env={env} playerId={player.id} onDeepDive={(frag)=>openExploration(frag)} />`
+6. **體力 → 靈力**：全專案文案 + StaminaBar 改名。DB 欄位 `stamina`/`stamina_updated_at` 暫留。消耗點只剩〔通靈深入〕−1。
 
-1. **`005_signal_clarity.sql`**：已套用，`scene_options` 欄位為 `signal_delta` / `result_text`。
-2. **`lib/exploration.js`**：`loadInvestigation` / `applyChoice` / `buildNarrative` 全部實作，ExplorationOverlay 已接上。
-3. **體力 → 靈力**：StaminaBar label、ExplorationOverlay 按鈕文案（靈力不足、通靈深入）全部更新。DB 欄位暫留 `stamina`。
-4. **Map.jsx 調頻盤**：頻帶 + 拖動指針，`fragPos()` 依 fragment id hash 給定穩定頻率位置，SNAP 9% / LOCK 4% 判斷。
-5. **weather.js 條件篩選**：`time_condition` / `weather_condition` / `date_condition` 客戶端過濾已實作。
-6. **〔重新感知〕鈕**：−1 靈力，強制重載訊號（同時清空 usedIds）。
+### 參數（程式內，playtest 可調）
+- `exploration.js`：`CLARITY_MAX=5`、`START_CLARITY={basic:3,lore:2}`、`HIGH_TIER_MIN=4`
+- `signals.js`：`DAILY_ROSTER_SIZE=6`、`IMPRESSION_COUNT=3`、`COND_FACTOR{match:3,neutral:1,mismatch:0.25}`、`OWNED_FACTOR=0.15`
 
 ## 其他尚未實作
-
-- 聯靈筆記本（多人協作，DB schema 已預留 `shared_notebooks` 等表）
-- Meta Horror 隨機事件（DB 表 `meta_horror_events` 已建）
-- Web Push 推播通知（靈力回滿提醒）
-- 付費金流
-- 玩家投稿流程
-- 鬼怪筆記本 UI（`creature_pages` 已在 DB 解鎖，書架頁待設計入口）
-- 協會等級加權計算（普通×1、稀有×2、傳說×3；鬼怪志版額外×1.5）
-- 完整帳號刪除（目前刪除 players 記錄 + signOut，auth.users 記錄留存在 Supabase）
+聯靈筆記本、Meta Horror 事件、Web Push、金流、玩家投稿、鬼怪筆記本 UI 入口、協會等級加權、完整帳號刪除、（未來）全域「今日出沒」featured 輪替（用日期種子即可，不撈光）。

@@ -1,334 +1,110 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
-import { getWeatherCondition, getTimeCondition, getDateCondition } from '../lib/weather'
-import { getAvailableSignals, fetchOwnedFragmentIds } from '../lib/signals'
-import ExplorationOverlay from '../components/exploration/ExplorationOverlay'
-import NotebookSelectModal from '../components/exploration/NotebookSelectModal'
+// Map.jsx — 感知主頁：筆記感知頁（取代調頻盤 / 舊雷達）
+// 感知 → 翻開的筆記頁上滲出 2-3 道墨痕印象 → 看完選一道深入 → 其餘墨痕散回紙裡 → 再感知。
+// 沒有錯覺（浮現的都是真的）；沒有難關；選擇的重量來自「只能挑一個，其餘消失」。
+//
+// 整合點（交給專案接）：
+//   props.env       來自 weather.js，形如 { time:'night', weather:'rain', date:null }
+//   props.playerId  目前玩家 id（usePlayer）
+//   props.onDeepDive(fragment)  按〔通靈深入〕時呼叫，由父層開 ExplorationOverlay（扣 1 靈力）
+//
+// 用法：<Map env={env} playerId={player.id} onDeepDive={(frag) => openExploration(frag)} />
+import { useEffect, useState, useCallback } from 'react'
+import { fetchImpressions, fetchOwnedFragmentIds } from '../lib/signals'
 
-const TIME_LABELS    = { dawn: '清晨', day: '白天', dusk: '黃昏', night: '深夜' }
-const WEATHER_LABELS = { clear: '晴', cloudy: '陰', fog: '霧', rain: '雨' }
-const IDLE_MSGS      = ['靜候訊號', '頻帶寂靜', '等待感應', '無異常訊號']
-const SNAP_PCT = 9   // % — starts glowing
-const LOCK_PCT = 4   // % — considered "on signal"
-const FREQ_LABELS = [88, 92, 96, 100, 104, 108]
+const GOLD = '#c9b99a'
+const INK = '#0c0a08'
+const PAPER = '#141210'
 
-export default function MapPage({ player, notebooks, stamina, consume, addFragment }) {
-  const [signals, setSignals]       = useState([])
-  const [usedIds, setUsedIds]       = useState(new Set())
-  const [loading, setLoading]       = useState(true)
-  const [env, setEnv]               = useState({ time: '', weather: '', date: null })
-  const [pos, setPos]               = useState(null)
-  const [needlePos, setNeedlePos]   = useState(15)
-  const [isHolding, setIsHolding]   = useState(false)
-  const [lockedAtm, setLockedAtm]   = useState(null)
-  const [overlay, setOverlay]       = useState(null)
-  const [noStamina, setNoStamina]   = useState(false)
-  const [pending, setPending]       = useState(null)
-  const [idleMsg, setIdleMsg]       = useState(IDLE_MSGS[0])
+export default function Map({ env, playerId, onDeepDive }) {
+  const [phase, setPhase] = useState('loading')   // loading | empty | sensing | selected
+  const [impressions, setImpressions] = useState([])
+  const [selected, setSelected] = useState(null)  // index
 
-  const bandRef       = useRef(null)
-  const dragging      = useRef(false)
-  const envRef        = useRef(env)
-  const playerIdRef   = useRef(player?.id)
-  const needlePosRef  = useRef(needlePos)
-  const nearestRef    = useRef(null)
-  useEffect(() => { envRef.current = env },           [env])
-  useEffect(() => { playerIdRef.current = player?.id }, [player?.id])
-  useEffect(() => { needlePosRef.current = needlePos }, [needlePos])
+  const sense = useCallback(async () => {
+    setPhase('loading'); setSelected(null); setImpressions([])
+    if (!env) { setPhase('empty'); return }
+    const ownedIds = playerId ? await fetchOwnedFragmentIds(playerId) : []
+    const imps = await fetchImpressions(env, { ownedIds })
+    if (!imps.length) { setPhase('empty'); return }
+    setImpressions(imps)
+    setPhase('sensing')
+  }, [env, playerId])
 
-  // ── Init ─────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!navigator.geolocation) { initEnv(null); return }
-    navigator.geolocation.getCurrentPosition(
-      p => { const c = { lat: p.coords.latitude, lng: p.coords.longitude }; setPos(c); initEnv(c) },
-      ()  => initEnv(null),
-      { enableHighAccuracy: false, timeout: 6000 }
-    )
-  }, [])
+  useEffect(() => { sense() }, [sense])
 
-  async function initEnv(coords) {
-    const time    = getTimeCondition()
-    const date    = getDateCondition()
-    const weather = coords ? await getWeatherCondition(coords.lat, coords.lng) : 'clear'
-    const e = { time, weather, date }
-    setEnv(e)
-    await loadSignals(e)
-  }
+  const choose = (i) => { setSelected(i); setPhase('selected') }
 
-  async function loadSignals(e) {
-    setLoading(true)
-    setUsedIds(new Set())
-    setIsHolding(false)
-    const ownedIds = await fetchOwnedFragmentIds(playerIdRef.current)
-    const sigs = await getAvailableSignals(e, { playerId: playerIdRef.current, ownedIds })
-    setSignals(sigs)
-    setLoading(false)
-  }
-
-  // ── Derived ───────────────────────────────────────────────────────────────
-  const activeSignals = useMemo(
-    () => signals.filter(s => !usedIds.has(s.id)),
-    [signals, usedIds]
-  )
-
-  const nearestSignal = useMemo(() => {
-    let best = null, bestDist = Infinity
-    for (const s of activeSignals) {
-      const d = Math.abs(needlePos - s.position)
-      if (d < SNAP_PCT && d < bestDist) { best = s; bestDist = d }
-    }
-    return best
-  }, [needlePos, activeSignals])
-
-  // Keep ref in sync for use in pointer handlers
-  useEffect(() => { nearestRef.current = nearestSignal }, [nearestSignal])
-
-  // isLocked: user released in lock zone AND needle still there
-  const isLocked = isHolding && !!nearestSignal && Math.abs(needlePos - nearestSignal.position) < LOCK_PCT
-
-  // Cancel hold if needle drifts out of lock zone (e.g. signals reload)
-  useEffect(() => {
-    if (isHolding && (!nearestSignal || Math.abs(needlePos - nearestSignal.position) >= LOCK_PCT)) {
-      setIsHolding(false)
-    }
-  }, [isHolding, needlePos, nearestSignal])
-
-  // Pick atmosphere once when locked signal changes
-  useEffect(() => {
-    if (!isLocked || !nearestSignal) { setLockedAtm(null); return }
-    const atms = nearestSignal.atmospheres
-    setLockedAtm(
-      atms.length > 0
-        ? atms[Math.floor(Math.random() * atms.length)].atmosphere_text
-        : '這裡有什麼不尋常。'
-    )
-  }, [isLocked, nearestSignal?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Idle message cycle
-  useEffect(() => {
-    if (isLocked || overlay || nearestSignal || loading) return
-    let i = 0
-    const t = setInterval(() => { i = (i + 1) % IDLE_MSGS.length; setIdleMsg(IDLE_MSGS[i]) }, 3500)
-    return () => clearInterval(t)
-  }, [isLocked, overlay, nearestSignal, loading])
-
-  // ── Band drag + hold-to-lock ──────────────────────────────────────────────
-  function posFromEvent(e) {
-    const rect = bandRef.current?.getBoundingClientRect()
-    if (!rect) return needlePosRef.current
-    return Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100))
-  }
-  function onBandDown(e) {
-    e.preventDefault()
-    dragging.current = true
-    setIsHolding(false)
-    bandRef.current?.setPointerCapture(e.pointerId)
-    setNeedlePos(posFromEvent(e))
-  }
-  function onBandMove(e) {
-    if (!dragging.current) return
-    setIsHolding(false)
-    setNeedlePos(posFromEvent(e))
-  }
-  function onBandUp() {
-    dragging.current = false
-    const near = nearestRef.current
-    const pos  = needlePosRef.current
-    if (near && Math.abs(pos - near.position) < LOCK_PCT) setIsHolding(true)
-  }
-
-  // ── Actions ───────────────────────────────────────────────────────────────
-  function handleEnterOverlay() {
-    if (!isLocked || !nearestSignal) return
-    setOverlay({ signalId: nearestSignal.id, atmosphereText: lockedAtm || '', fragment: nearestSignal.fragment })
-    setNoStamina(false)
-  }
-
-  async function handleDeepen() {
-    if (stamina < 1) { setNoStamina(true); return false }
-    const ok = await consume(1)
-    if (!ok) { setNoStamina(true); return false }
-    if (overlay?.signalId) setUsedIds(prev => new Set([...prev, overlay.signalId]))
-    setIsHolding(false)
-    return true
-  }
-
-  async function handleRefresh() {
-    if (stamina < 1 || loading) return
-    const ok = await consume(1)
-    if (!ok) return
-    await loadSignals(envRef.current)
-  }
-
-  function handleSuccess(frag, narrative) {
-    setPending({ frag, narrative })
-    setOverlay(null)
-  }
-
-  async function handleNotebookSelect(notebookId) {
-    if (!pending) return
-    await addFragment(notebookId, pending.frag.id, pending.narrative || '')
-    setPending(null)
-  }
-
-  // ── Status text ───────────────────────────────────────────────────────────
-  const statusText = loading                     ? '感應中...'
-    : isLocked                                   ? '— 訊號定位 —'
-    : nearestSignal                              ? '調頻中...'
-    : activeSignals.length === 0                 ? '此刻無訊號'
-    : idleMsg
-
-  const timeLabel    = TIME_LABELS[env.time]       || ''
-  const weatherLabel = WEATHER_LABELS[env.weather] || ''
-
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex-1 relative overflow-hidden flex flex-col" style={{ background: '#080604' }}>
-
-      {/* CRT scanlines */}
-      <div className="absolute inset-0 pointer-events-none" style={{
-        backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(201,185,154,0.013) 3px,rgba(201,185,154,0.013) 4px)',
-      }} />
-      {/* Vignette */}
-      <div className="absolute inset-0 pointer-events-none" style={{
-        background: 'radial-gradient(ellipse at center, transparent 40%, rgba(8,6,4,0.85) 100%)',
-      }} />
-
-      {/* ── Status bar ── */}
-      <div className="relative z-10 shrink-0 mt-3 mx-3">
-        <div className="border border-dim/40 bg-[#080604]/80 backdrop-blur-sm px-4 py-2.5 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {timeLabel    && <span className="font-mono text-muted text-xs">{timeLabel}</span>}
-            {weatherLabel && <span className="font-mono text-dim   text-xs">{weatherLabel}</span>}
-          </div>
-          <span className="font-mono text-muted text-xs tracking-wide">{statusText}</span>
-        </div>
-        {pos && (
-          <p className="font-mono text-dim/40 text-[9px] text-right mt-1 pr-1 tracking-wider">
-            {pos.lat.toFixed(4)} N&nbsp;&nbsp;{pos.lng.toFixed(4)} E
-          </p>
-        )}
+    <div style={{
+      minHeight: '100%', background: INK, color: GOLD, padding: '24px 20px',
+      backgroundImage: `radial-gradient(120% 80% at 50% -10%, ${PAPER} 0%, ${INK} 70%)`,
+    }}>
+      {/* 環境狀態列 */}
+      <div style={{ fontSize: 12, opacity: 0.55, letterSpacing: 2, marginBottom: 6 }}>
+        {env ? `此地 · ${labelTime(env.time)} · ${labelWeather(env.weather)}${env.date ? ' · ' + labelDate(env.date) : ''}` : '定位中…'}
       </div>
+      <div style={{ fontSize: 13, opacity: 0.4, letterSpacing: 4, marginBottom: 28 }}>感 知</div>
 
-      {/* ── Centre: atmosphere / idle ── */}
-      <div className="flex-1 flex flex-col items-center justify-center relative z-10 px-8 gap-6">
-        {isLocked && lockedAtm ? (
-          <>
-            <p key={nearestSignal?.id}
-               className="font-mono text-ink text-sm leading-7 text-center max-w-xs fade-in whitespace-pre-line">
-              {lockedAtm}
-            </p>
-            <button
-              onClick={handleEnterOverlay}
-              disabled={stamina < 1}
-              className="font-mono text-accent text-xs tracking-widest hover:text-ink transition-colors
-                         underline underline-offset-4 decoration-dim disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {stamina < 1 ? '靈力不足' : '通靈深入'}
-            </button>
-          </>
-        ) : loading ? (
-          <span className="font-mono text-dim text-xs animate-pulse tracking-widest">感應中...</span>
-        ) : activeSignals.length === 0 ? (
-          <p className="font-mono text-dim text-xs text-center leading-7">
-            此刻無異常訊號<br />換個時間再來
-          </p>
-        ) : (
-          <p className="font-mono text-dim/50 text-[10px] tracking-[0.3em]">
-            {nearestSignal ? '▷ 調頻中' : '左右拖動調頻'}
-          </p>
-        )}
-      </div>
-
-      {/* ── Frequency band ── */}
-      <div className="relative z-10 px-5 pb-1 shrink-0">
-        <div
-          ref={bandRef}
-          className="relative h-12 border border-dim/25 select-none cursor-pointer"
-          style={{ background: 'rgba(201,185,154,0.025)', touchAction: 'none' }}
-          onPointerDown={onBandDown}
-          onPointerMove={onBandMove}
-          onPointerUp={onBandUp}
-          onPointerCancel={onBandUp}
-        >
-          {/* Signal markers */}
-          {activeSignals.map(s => {
-            const dist   = Math.abs(needlePos - s.position)
-            const near   = dist < SNAP_PCT
-            const locked = dist < LOCK_PCT && isHolding
-            return (
-              <div key={s.id} className="absolute top-1.5 bottom-1.5 pointer-events-none"
-                style={{
-                  left: `${s.position}%`,
-                  width: locked ? 2 : 1,
-                  transform: 'translateX(-50%)',
-                  background: locked ? '#c9b99a' : near ? 'rgba(201,185,154,0.65)' : 'rgba(201,185,154,0.22)',
-                  boxShadow: locked ? '0 0 10px 5px rgba(201,185,154,0.5)' : near ? '0 0 5px 2px rgba(201,185,154,0.28)' : 'none',
-                  transition: 'all 0.15s',
-                }}
-              />
-            )
-          })}
-
-          {/* Needle */}
-          <div className="absolute top-0 bottom-0 pointer-events-none"
-            style={{
-              left: `${needlePos}%`, width: 1, transform: 'translateX(-50%)',
-              background: '#c9b99a', boxShadow: '0 0 6px 2px rgba(201,185,154,0.45)',
-            }}
-          />
-          {/* Needle tip */}
-          <div className="absolute bottom-0 pointer-events-none"
-            style={{
-              left: `${needlePos}%`, transform: 'translateX(-50%)',
-              width: 0, height: 0,
-              borderLeft: '4px solid transparent', borderRight: '4px solid transparent',
-              borderBottom: '5px solid rgba(201,185,154,0.6)',
-            }}
-          />
-        </div>
-
-        {/* Frequency decoration labels */}
-        <div className="relative h-4 mt-0.5">
-          {FREQ_LABELS.map((f, i) => (
-            <span key={f} className="absolute font-mono text-[8px] text-dim/25 tracking-tight"
-              style={{ left: `${(i / (FREQ_LABELS.length - 1)) * 100}%`, transform: 'translateX(-50%)' }}>
-              {f}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Controls ── */}
-      <div className="relative z-10 flex items-center justify-end px-5 pb-4 shrink-0">
-        <button
-          onClick={handleRefresh}
-          disabled={stamina < 1 || loading}
-          className="font-mono text-dim text-[10px] tracking-widest hover:text-muted transition-colors
-                     disabled:opacity-25 disabled:cursor-not-allowed"
-        >
-          重新感知 −1
-        </button>
-      </div>
-
-      {/* ── Overlay ── */}
-      {overlay && (
-        <ExplorationOverlay
-          atmosphereText={overlay.atmosphereText}
-          fragment={overlay.fragment}
-          noStamina={noStamina}
-          onClose={() => { setOverlay(null); setNoStamina(false) }}
-          onDeepen={handleDeepen}
-          onSuccess={handleSuccess}
-        />
+      {phase === 'loading' && (
+        <div style={{ opacity: 0.5, textAlign: 'center', marginTop: 80, letterSpacing: 2 }}>墨色正在滲開…</div>
       )}
 
-      <NotebookSelectModal
-        open={!!pending}
-        notebooks={notebooks}
-        fragment={pending?.frag}
-        onSelect={handleNotebookSelect}
-        onClose={() => setPending(null)}
-      />
+      {phase === 'empty' && (
+        <div style={{ textAlign: 'center', marginTop: 80, opacity: 0.55, lineHeight: 2.2 }}>
+          <div>今晚很安靜。</div>
+          <div style={{ fontSize: 13 }}>紙上沒有浮現任何痕跡，換個時機再來。</div>
+          <button onClick={sense} style={btn}>重新感知</button>
+        </div>
+      )}
+
+      {(phase === 'sensing' || phase === 'selected') && impressions.map((imp, i) => {
+        const isSel = selected === i
+        const faded = phase === 'selected' && !isSel
+        return (
+          <div
+            key={imp.fragment.id}
+            onClick={() => phase === 'sensing' && choose(i)}
+            style={{
+              position: 'relative',
+              margin: '0 0 16px', padding: '16px 18px 16px 22px',
+              borderLeft: `2px solid ${GOLD}${isSel ? 'cc' : '55'}`,
+              background: `linear-gradient(90deg, ${GOLD}0d, transparent 70%)`,
+              cursor: phase === 'sensing' ? 'pointer' : 'default',
+              opacity: faded ? 0.12 : 1,
+              transition: 'opacity 700ms ease',
+              animation: phase === 'sensing' ? `ink 700ms ease ${i * 180}ms both` : 'none',
+            }}
+          >
+            <p style={{ lineHeight: 1.9, fontSize: 15, margin: 0 }}>{imp.atmosphere}</p>
+          </div>
+        )
+      })}
+
+      {phase === 'sensing' && (
+        <div style={{ textAlign: 'center', marginTop: 8, fontSize: 12, opacity: 0.45 }}>
+          選一道墨痕凝神細看，其餘會散去。
+        </div>
+      )}
+
+      {phase === 'selected' && selected != null && (
+        <div style={{ marginTop: 24, display: 'flex', gap: 12 }}>
+          <button onClick={() => onDeepDive?.(impressions[selected].fragment)} style={{ ...btn, flex: 1, borderColor: GOLD }}>
+            通靈深入（−1 靈力）
+          </button>
+          <button onClick={sense} style={{ ...btn, flex: 1 }}>重新感知</button>
+        </div>
+      )}
+
+      <style>{`@keyframes ink { from { opacity: 0; filter: blur(3px) } to { opacity: 1; filter: blur(0) } }`}</style>
     </div>
   )
 }
+
+const btn = {
+  background: 'transparent', color: GOLD, border: `1px solid ${GOLD}66`,
+  padding: '12px 18px', fontSize: 13, letterSpacing: 1, borderRadius: 4, cursor: 'pointer', marginTop: 12,
+}
+
+const labelTime = (t) => ({ dawn: '清晨', day: '白日', dusk: '黃昏', night: '深夜' }[t] || '—')
+const labelWeather = (w) => ({ clear: '晴', cloudy: '陰', rain: '雨', fog: '霧' }[w] || '—')
+const labelDate = (d) => ({ ghost_month: '鬼月', qingming: '清明', dongzhi: '冬至' }[d] || '')
