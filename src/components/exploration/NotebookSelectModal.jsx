@@ -1,7 +1,7 @@
 import Modal from '../ui/Modal'
 
 export default function NotebookSelectModal({ open, notebooks, fragment, onSelect, onClose }) {
-  const available = notebooks.filter(n => (n.fragments?.length ?? 0) < n.capacity)
+  const available = (notebooks || []).filter(n => (n.fragments?.length ?? 0) < n.capacity)
 
   return (
     <Modal open={open} onClose={onClose} title="放入哪一本筆記本">
