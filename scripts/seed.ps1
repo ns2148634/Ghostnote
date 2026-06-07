@@ -6,24 +6,26 @@ $KEY      = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZi
 $HEADERS  = @{
     "apikey"        = $KEY
     "Authorization" = "Bearer $KEY"
-    "Content-Type"  = "application/json"
+    "Content-Type"  = "application/json; charset=utf-8"
     "Prefer"        = "return=representation"
 }
 $H_MIN    = @{
     "apikey"        = $KEY
     "Authorization" = "Bearer $KEY"
-    "Content-Type"  = "application/json"
+    "Content-Type"  = "application/json; charset=utf-8"
     "Prefer"        = "return=minimal"
 }
 
 function Post($table, $body) {
-    $json = $body | ConvertTo-Json -Depth 10 -Compress
-    $r = Invoke-RestMethod -Uri "$SUPA_URL/$table" -Method Post -Headers $HEADERS -Body $json
+    $json  = $body | ConvertTo-Json -Depth 10 -Compress
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+    $r = Invoke-RestMethod -Uri "$SUPA_URL/$table" -Method Post -Headers $HEADERS -Body $bytes
     return $r
 }
 function PostMin($table, $body) {
-    $json = $body | ConvertTo-Json -Depth 10 -Compress
-    Invoke-RestMethod -Uri "$SUPA_URL/$table" -Method Post -Headers $H_MIN -Body $json | Out-Null
+    $json  = $body | ConvertTo-Json -Depth 10 -Compress
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+    Invoke-RestMethod -Uri "$SUPA_URL/$table" -Method Post -Headers $H_MIN -Body $bytes | Out-Null
 }
 function NewUid { [System.Guid]::NewGuid().ToString() }
 
