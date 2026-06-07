@@ -68,7 +68,11 @@ export default function MapRoute({ player, notebooks, stamina, consume, addFragm
           env={env}
           playerId={player?.id}
           stamina={stamina}
-          consume={consume}
+          onSense={() => {
+            if (stamina < 1) return false
+            consume(1)   // 非同步扣款，Map 不等待
+            return true
+          }}
           onDeepDive={handleDeepDive}
         />
       )}
