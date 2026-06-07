@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import Modal from '../components/ui/Modal'
 
 const ITEMS = [
-  { id: 'stamina',  label: '體力藥水',          desc: '立即回復 5 格體力。',              price: 30,  icon: '◈' },
+  { id: 'stamina',  label: '靈力藥水',          desc: '立即回復 5 格靈力。',              price: 30,  icon: '◈' },
   { id: 'notebook', label: '追加筆記本',         desc: '新增一本 15 格容量的個人筆記本。', price: 80,  icon: '▣' },
   { id: 'shared3',  label: '聯靈筆記本（小組）', desc: '3 人協作筆記本，消耗品。',         price: 150, icon: '▥' },
   { id: 'shared6',  label: '聯靈筆記本（團隊）', desc: '6 人協作筆記本，消耗品。',         price: 250, icon: '▦' },
@@ -37,7 +37,7 @@ export default function ShopPage({ player, setPlayer, stamina, maxStamina, seale
       .update({ stamina: Math.min(10, (player.stamina || 0) + 5), stamina_updated_at: new Date().toISOString() })
       .eq('id', player.id).select().single()
     if (data) setPlayer(data)
-    flash('體力回復 5 格。')
+    flash('靈力回復 5 格。')
   }
 
   async function buyNotebook() {
@@ -99,7 +99,7 @@ export default function ShopPage({ player, setPlayer, stamina, maxStamina, seale
             <span className="font-mono text-ink text-xs">{sealedCount} 本</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="font-mono text-muted text-xs">體力</span>
+            <span className="font-mono text-muted text-xs">靈力</span>
             <span className="font-mono text-ink text-xs">{stamina ?? '—'} / {maxStamina ?? 10}</span>
           </div>
         </div>

@@ -173,6 +173,7 @@ if (r.outcome === 'continue') { i++ }
 
 **Overlay / 過渡技術細節**：
 - Overlay `fixed inset-0 z-[2000]` + 內容 `max-w-[600px] mx-auto`
+- **探查不顯示訊號數字/「±」說明**：每步只顯示 result_text（純現場反應，不含「訊號」字眼），訊號格只用視覺增減，不打文字說明，以免打斷閱讀
 - **FragmentReveal**（`z-[2100]`）：成功後過渡。黑底 `#080604`，依 rarity 顯示不同顏色 fragment_label 打字機（common=#c8c0b8、rare=#b8c8e0、lore=#c8a84a），lore 中途暫停 600ms；打完抖動（opacity 1→0.3→1，80ms），+300ms 顯示 fragment_text，+1200ms 進 NotebookSelectModal
 - 右上角 `A-` / `A+` 調探查字級（4 級），存 `localStorage` key `ghostnote_font_size`
 
@@ -283,19 +284,6 @@ creature_pages(id, player_id, story_id, unlocked_layer, obtained_at)
 
 ### 已知鬼怪 image_slug
 屍鼠 shushi｜廁所花子 hanako｜新娘電梯 elevator_bride｜隔壁的鄰居 neighbor｜三樓的轉學生 transfer_student｜夜班的那個人 night_shift｜最後一班的乘客 last_passenger｜三點十七分的同事 317_coworker｜對面的那個人 metro_stranger
-
-## 本次改版待實作（交給 Code，依序）
-
-1. **跑 `005_signal_clarity.sql`**：改 scene_options 欄位 + 轉換資料。跑完補寫正確/skippable 選項的 `result_text`（目前空字串）。
-2. **跑 `006_tiered_ending.sql`**：fragment_scenes 加 `ending_high`/`ending_low`。為現有鬼怪最後一層補兩段收尾。
-3. **接 `lib/exploration.js`**：ExplorationOverlay 改用 `loadInvestigation`/`applyChoice`/`getEnding`/`buildNarrative`，移除舊 `is_correct`/`fail_text`/25% 誤判。新增訊號格 UI（0–5，隨 delta 動畫；歸 0 → 散去）。成功依 `tier` 顯示 `getEnding` 收尾再進 FragmentReveal。
-4. **接 `lib/signals.js`**：感知頁用 `fetchImpressions(env, { ownedIds })` 取 2-3 個印象。每日輪替 + 條件加權 + 已持有降權。
-5. **Map.jsx 改筆記感知頁**：移除雷達/調頻/`toScreen()`/anomaly-dot。改成感知 → 浮現 2-3 道墨痕印象（各一句 atmosphere）→ 點一道、其餘淡掉 → 〔通靈深入〕/〔重新感知〕。父層傳 `env`（weather.js）、`playerId`（usePlayer）、`onDeepDive(fragment)`（開 ExplorationOverlay 扣 1 靈力）。用法：`<Map env={env} playerId={player.id} onDeepDive={(frag)=>openExploration(frag)} />`
-6. **體力 → 靈力**：全專案文案 + StaminaBar 改名。DB 欄位 `stamina`/`stamina_updated_at` 暫留。消耗點只剩〔通靈深入〕−1。
-
-### 參數（程式內，playtest 可調）
-- `exploration.js`：`CLARITY_MAX=5`、`START_CLARITY={basic:3,lore:2}`、`HIGH_TIER_MIN=4`
-- `signals.js`：`DAILY_ROSTER_SIZE=6`、`IMPRESSION_COUNT=3`、`COND_FACTOR{match:3,neutral:1,mismatch:0.25}`、`OWNED_FACTOR=0.15`
 
 ## 其他尚未實作
 聯靈筆記本、Meta Horror 事件、Web Push、金流、玩家投稿、鬼怪筆記本 UI 入口、協會等級加權、完整帳號刪除、（未來）全域「今日出沒」featured 輪替（用日期種子即可，不撈光）。
