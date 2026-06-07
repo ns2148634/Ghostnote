@@ -1,38 +1,50 @@
 // Map.jsx — 感知主頁：筆記感知頁（取代調頻盤 / 舊雷達）
 // 感知 → 翻開的筆記頁上滲出 2-3 道墨痕印象 → 看完選一道深入 → 其餘墨痕散回紙裡 → 再感知。
 // 沒有錯覺（浮現的都是真的）；沒有難關；選擇的重量來自「只能挑一個，其餘消失」。
+// 感知（−1 靈力），通靈深入免費。
 //
-// 整合點（交給專案接）：
-//   props.env       來自 weather.js，形如 { time:'night', weather:'rain', date:null }
-//   props.playerId  目前玩家 id（usePlayer）
-//   props.onDeepDive(fragment)  按〔通靈深入〕時呼叫，由父層開 ExplorationOverlay（扣 1 靈力）
-//
-// 用法：<Map env={env} playerId={player.id} onDeepDive={(frag) => openExploration(frag)} />
-import { useEffect, useState, useCallback } from 'react'
+// props.env        來自 weather.js，形如 { time:'night', weather:'rain', date:null }
+// props.playerId   目前玩家 id
+// props.stamina    當前靈力（數字）
+// props.consume    async (n) => bool — 扣靈力
+// props.onDeepDive(fragment)  按〔通靈深入〕時呼叫，由父層開 ExplorationOverlay（免費）
+import { useState, useCallback } from 'react'
 import { fetchImpressions, fetchOwnedFragmentIds } from '../lib/signals'
 
 const GOLD = '#c9b99a'
 const INK = '#0c0a08'
 const PAPER = '#141210'
 
-export default function Map({ env, playerId, onDeepDive }) {
-  const [phase, setPhase] = useState('loading')   // loading | empty | sensing | selected
+export default function Map({ env, playerId, stamina, consume, onDeepDive }) {
+  const [phase, setPhase] = useState('idle')   // idle | loading | empty | sensing | selected
   const [impressions, setImpressions] = useState([])
-  const [selected, setSelected] = useState(null)  // index
+  const [selected, setSelected] = useState(null)
+
+  const canSense = stamina >= 1
 
   const sense = useCallback(async () => {
+    if (!canSense) return
     setPhase('loading'); setSelected(null); setImpressions([])
+    await consume(1)
     if (!env) { setPhase('empty'); return }
     const ownedIds = playerId ? await fetchOwnedFragmentIds(playerId) : []
     const imps = await fetchImpressions(env, { ownedIds })
     if (!imps.length) { setPhase('empty'); return }
     setImpressions(imps)
     setPhase('sensing')
-  }, [env, playerId])
-
-  useEffect(() => { sense() }, [sense])
+  }, [env, playerId, canSense, consume])
 
   const choose = (i) => { setSelected(i); setPhase('selected') }
+
+  const SenseBtn = ({ label, style: s }) => (
+    <button
+      onClick={sense}
+      disabled={!canSense}
+      style={{ ...btn, ...s, opacity: canSense ? 1 : 0.35, cursor: canSense ? 'pointer' : 'not-allowed' }}
+    >
+      {canSense ? label : '靈力不足'}
+    </button>
+  )
 
   return (
     <div style={{
@@ -45,6 +57,12 @@ export default function Map({ env, playerId, onDeepDive }) {
       </div>
       <div style={{ fontSize: 13, opacity: 0.4, letterSpacing: 4, marginBottom: 28 }}>感 知</div>
 
+      {phase === 'idle' && (
+        <div style={{ textAlign: 'center', marginTop: 80 }}>
+          <SenseBtn label="感知（−1）" />
+        </div>
+      )}
+
       {phase === 'loading' && (
         <div style={{ opacity: 0.5, textAlign: 'center', marginTop: 80, letterSpacing: 2 }}>墨色正在滲開…</div>
       )}
@@ -53,7 +71,7 @@ export default function Map({ env, playerId, onDeepDive }) {
         <div style={{ textAlign: 'center', marginTop: 80, opacity: 0.55, lineHeight: 2.2 }}>
           <div>今晚很安靜。</div>
           <div style={{ fontSize: 13 }}>紙上沒有浮現任何痕跡，換個時機再來。</div>
-          <button onClick={sense} style={btn}>重新感知</button>
+          <SenseBtn label="重新感知（−1）" style={{ marginTop: 20 }} />
         </div>
       )}
 
@@ -88,10 +106,13 @@ export default function Map({ env, playerId, onDeepDive }) {
 
       {phase === 'selected' && selected != null && (
         <div style={{ marginTop: 24, display: 'flex', gap: 12 }}>
-          <button onClick={() => onDeepDive?.(impressions[selected].fragment)} style={{ ...btn, flex: 1, borderColor: GOLD }}>
-            通靈深入（−1 靈力）
+          <button
+            onClick={() => onDeepDive?.(impressions[selected].fragment)}
+            style={{ ...btn, flex: 1, borderColor: GOLD }}
+          >
+            通靈深入
           </button>
-          <button onClick={sense} style={{ ...btn, flex: 1 }}>重新感知</button>
+          <SenseBtn label="重新感知（−1）" style={{ flex: 1, marginTop: 0 }} />
         </div>
       )}
 

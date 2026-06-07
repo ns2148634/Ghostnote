@@ -10,7 +10,6 @@ export default function MapRoute({ player, notebooks, stamina, consume, addFragm
   const [env, setEnv]         = useState(null)
   const [scanKey, setScanKey] = useState(0)   // increment to force Map remount → new scan
   const [overlay, setOverlay] = useState(null) // { fragment }
-  const [noStamina, setNoStamina] = useState(false)
   const [pending, setPending] = useState(null) // { frag, narrative }
 
   // Compute env once on mount (GPS optional, only needed for weather)
@@ -37,18 +36,9 @@ export default function MapRoute({ player, notebooks, stamina, consume, addFragm
     load()
   }, [])
 
-  // Called by Map when user clicks 通靈深入
+  // Called by Map when user clicks 通靈深入（免費，靈力已在感知時扣過）
   function handleDeepDive(fragment) {
     setOverlay({ fragment })
-    setNoStamina(false)
-  }
-
-  // Called by ExplorationOverlay to consume 1 stamina
-  async function handleDeepen() {
-    if (stamina < 1) { setNoStamina(true); return false }
-    const ok = await consume(1)
-    if (!ok) { setNoStamina(true); return false }
-    return true
   }
 
   // Called by ExplorationOverlay on success (before NotebookSelectModal)
@@ -60,7 +50,6 @@ export default function MapRoute({ player, notebooks, stamina, consume, addFragm
   // Close overlay (fail / user bailed) → trigger a new scan
   function handleOverlayClose() {
     setOverlay(null)
-    setNoStamina(false)
     setScanKey(k => k + 1)
   }
 
@@ -78,6 +67,8 @@ export default function MapRoute({ player, notebooks, stamina, consume, addFragm
         key={scanKey}
         env={env}
         playerId={player?.id}
+        stamina={stamina}
+        consume={consume}
         onDeepDive={handleDeepDive}
       />
 
@@ -85,9 +76,7 @@ export default function MapRoute({ player, notebooks, stamina, consume, addFragm
         <ExplorationOverlay
           atmosphereText=""
           fragment={overlay.fragment}
-          noStamina={noStamina}
           onClose={handleOverlayClose}
-          onDeepen={handleDeepen}
           onSuccess={handleSuccess}
           startScene={true}
         />

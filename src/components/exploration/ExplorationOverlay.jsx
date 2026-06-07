@@ -114,11 +114,9 @@ function TypewriterText({ text, speed = 35, onDone }) {
 export default function ExplorationOverlay({
   atmosphereText,
   fragment,
-  noStamina,
   onClose,
-  onDeepen,              // async () => bool — consumes stamina
   onSuccess,             // (fragment, narrative) => void
-  startScene = false,    // skip atmosphere phase, auto-call onDeepen on mount
+  startScene = false,    // skip atmosphere phase, auto-start investigation on mount
 }) {
   const [phase, setPhase]               = useState('atmosphere')
   const [layers, setLayers]             = useState([])
@@ -158,9 +156,6 @@ export default function ExplorationOverlay({
 
   async function handleDeepen() {
     setBusy(true)
-    const ok = await onDeepen()
-    if (!ok) { setBusy(false); return }
-
     const inv = await loadInvestigation(fragment)
     setBusy(false)
 
@@ -224,11 +219,11 @@ export default function ExplorationOverlay({
                   </button>
                   <button
                     onClick={handleDeepen}
-                    disabled={busy || noStamina}
+                    disabled={busy}
                     className="font-mono text-accent text-xs tracking-widest hover:text-ink transition-colors
                                underline underline-offset-4 decoration-dim disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    {noStamina ? '靈力不足' : busy ? '...' : '通靈深入'}
+                    {busy ? '...' : '通靈深入'}
                   </button>
                 </div>
               )}
