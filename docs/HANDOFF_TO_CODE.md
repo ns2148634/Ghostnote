@@ -11,7 +11,7 @@
 - 感知入口從「雷達掃描 + 定位點」改成「**筆記感知頁**」：感知 → 紙上浮現 2–3 道墨痕印象 → 選一道深入、其餘淡掉。沒有錯覺，不可能失敗。
 - GPS **只用於環境**（時辰/天氣/節日），不做地圖、不要玩家移動。
 - 加「**每日輪替 + 條件加權**」決定此刻浮現誰；加「**分層結局**」依剩餘格數換收尾文字。
-- 體力改名「**靈力**」；一次探查只在〔通靈深入〕扣 1 格。
+- 體力改名「**靈力**」；**感知（掃描）扣 1 靈力，通靈深入免費**（成本放感知，擋無限重刷）。
 
 ---
 
@@ -53,8 +53,17 @@
 **Map.jsx（筆記感知頁）** — props 驅動，父層（放 Map 的路由/App）要：
 - 傳 `env`：用 `src/lib/weather.js` 算 `{ time, weather, date }`（date 可 null）。
 - 傳 `playerId`：用 `usePlayer`。
-- 接 `onDeepDive(fragment)`：按〔通靈深入〕時，用此 fragment 開 `ExplorationOverlay` 並扣 1 靈力。
-- 用法：`<Map env={env} playerId={player.id} onDeepDive={(frag) => openExploration(frag)} />`
+- 傳 `stamina`：目前靈力數值，用於按鈕顯示與停用。
+- 傳 `onSense()`：Map 按感知/重新感知時呼叫；父層扣 1 靈力並**同步回傳 boolean**（`true`=扣成功，`false`=靈力不足）；Map 收到 `false` 顯示提示並不浮現。
+- 傳 `onDeepDive(fragment)`：按〔通靈深入〕時呼叫，開 `ExplorationOverlay`，**不扣靈力**。
+- 用法：
+  ```jsx
+  <Map
+    env={env} playerId={player.id} stamina={stamina}
+    onSense={() => { if (stamina < 1) return false; consume(1); return true }}
+    onDeepDive={(frag) => openExploration(frag)}
+  />
+  ```
 - Map.jsx 會 import `signals.js` 的 `fetchImpressions` / `fetchOwnedFragmentIds`（務必先放好 signals.js）。
 - 行為：感知 → 浮現 2–3 道墨痕印象（各一句 atmosphere）→ 點一道、其餘淡掉 → 〔通靈深入〕/〔重新感知〕。視覺用 inline style，不依賴 Tailwind。
 - 字典 `labelTime/Weather/Date` 在檔尾，對專案語系調整。
@@ -65,7 +74,7 @@
 
 **探查文字** — 每步只顯示 result_text（純現場反應），訊號格變化只走視覺，**不要顯示「訊號 +1 / 減弱」之類的文字說明**（會打斷閱讀）。
 
-**體力 → 靈力** — 全專案文案 + StaminaBar 改名。DB 欄位 `stamina` / `stamina_updated_at` **暫留**，只改 UI 文字。消耗點只剩〔通靈深入〕−1。
+**體力 → 靈力** — 全專案文案 + StaminaBar 改名。DB 欄位 `stamina` / `stamina_updated_at` **暫留**，只改 UI 文字。**消耗點：感知 −1、通靈深入免費；靈力不足不能感知。**
 
 ### 5. 參數（程式內，playtest 可調）
 - `exploration.js`：`CLARITY_MAX=5`、`START_CLARITY={basic:3, lore:2}`、`HIGH_TIER_MIN=4`
@@ -93,7 +102,7 @@
 5. **Map 三個 props 必接**：env、playerId、onDeepDive 任一沒接，感知浮不出印象或通靈深入沒反應。
 6. **drawOptions 依賴內容**：判斷層選項池要同時有 delta≥0 與 <0，否則抽不出「活路+錯步」。
 7. **GPS 只給 env**：不要重新引入地圖/定位點/移動需求。
-8. **靈力消耗點唯一**：只有〔通靈深入〕扣 1；感知、浮現、預覽全免費。
+8. **靈力消耗點**：感知（掃描）扣 1；浮現/預覽/通靈深入/選擇免費；靈力不足不能感知。
 
 ---
 

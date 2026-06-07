@@ -96,19 +96,21 @@ current = min(10, stored + floor((now - updated_at) / 8分鐘))
 ```
 消耗時把 recovered 先加回再扣，更新 `stamina` + `stamina_updated_at`（DB 欄位名暫留 stamina，UI 顯示為「靈力」）。
 
-**消耗規則**：一次探查只在玩家按〔通靈深入〕時扣 **1 格**。感知、浮現印象、預覽氛圍，全部免費。多層感知的選擇也不扣。
+**消耗規則**：**感知（掃描）時扣 1 格靈力**；浮現印象、預覽、通靈深入、多層選擇全部免費。成本放在感知（而非深入），既擋住無限重刷，一次嘗試也只花 1 格。靈力不足時不能感知。
 
 ### 感知頁互動（Map.jsx，筆記感知頁）
 
 感知是唯一入口，取代舊的雷達/調頻。**氛圍導向，不是難關，沒有錯覺、不可能失敗。**選擇的重量來自「只能挑一個，其餘消失」。
 
 - **畫面**：翻開的筆記頁（深黑 `#080604` + 紙面漸層 + 暖金）。頂端顯示環境（時辰 + 天氣 + 節日）。
-- **感知（免費）**：墨色滲開，紙上浮現 **2–3 道墨痕印象**，各一句 `fragment_atmosphere`（現場感知到的異常，如「暗巷裡似乎有人影」）。墨痕用 blur→clear 滲出、交錯延遲出現。
-- **選一道深入**：點一道墨痕 → **其餘墨痕淡掉（散回紙裡）** → 顯示〔通靈深入〕(−1 靈力) /〔重新感知〕。
+- **待機**：頁面中央一顆「感知」按鈕（呼吸光暈）。進頁面不自動感知、不扣靈力。
+- **感知（−1 靈力）**：按下中央按鈕才觸發——扣 1 靈力後墨色滲開，紙上浮現 **2–3 道墨痕印象**，各一句 `fragment_atmosphere`（現場感知到的異常，如「暗巷裡似乎有人影」）。墨痕用 blur→clear 滲出、交錯延遲出現。
+- **選一道深入**：點一道墨痕 → **其餘墨痕淡掉（散回紙裡）** → 顯示〔通靈深入〕（免費）/〔重新感知（＝再感知一次，−1 靈力）〕。
 - **一次一個**：深入或放掉後 → 再感知，浮現新的一批。
 - **空頁**：環境沒有可浮現的印象時，顯示「今晚很安靜，紙上沒有浮現任何痕跡」。不懲罰，換時機再來。
 - **沒有錯覺**：浮現的都是真的碎片；選擇的張力來自機會成本（挑一個、放掉其餘），不是「白工」。
 - 視覺用 inline style，不依賴 Tailwind 設定。
+- **Map props**：`env`（weather.js 結果）、`playerId`、`stamina`（顯示/停用用）、`onSense()` → 父層同步扣靈力、回傳 bool、`onDeepDive(fragment)`。MapRoute 以 `{!overlay && <Map/>}` 條件渲染（overlay 開著時 Map 不存在），overlay 關閉後 Map 自然重掛為 idle。
 
 ### 訊號出沒規律與每日輪替（signals.js）
 
@@ -160,10 +162,10 @@ if (r.outcome === 'continue') { i++ }
 ### 感知 / 探查完整流程
 
 ```
-感知（免費）
+感知（−1 靈力）
   ※ signals.js：每日輪替 + 環境加權 → fetchImpressions 回傳 2-3 個 { fragment, atmosphere }
 → 紙上浮現 2-3 道墨痕印象（各一句現場感知）
-→ 選一道深入：點一道 → 其餘淡掉 → 〔通靈深入〕(−1 靈力) 或〔重新感知〕
+→ 選一道深入：點一道 → 其餘淡掉 → 〔通靈深入〕（免費）或〔重新感知（−1 靈力）〕
 → 通靈深入 → 進入多層感知（現場遭遇）
 → 每層：一個場景 + 抽 3 個選項 → 選擇 → result_text + 調整訊號格
 → 結算：
@@ -284,6 +286,19 @@ creature_pages(id, player_id, story_id, unlocked_layer, obtained_at)
 
 ### 已知鬼怪 image_slug
 屍鼠 shushi｜廁所花子 hanako｜新娘電梯 elevator_bride｜隔壁的鄰居 neighbor｜三樓的轉學生 transfer_student｜夜班的那個人 night_shift｜最後一班的乘客 last_passenger｜三點十七分的同事 317_coworker｜對面的那個人 metro_stranger
+
+## 本次改版待實作（交給 Code，依序）
+
+1. **跑 `005_signal_clarity.sql`**：改 scene_options 欄位 + 轉換資料。跑完補寫正確/skippable 選項的 `result_text`（目前空字串）。
+2. **跑 `006_tiered_ending.sql`**：fragment_scenes 加 `ending_high`/`ending_low`。為現有鬼怪最後一層補兩段收尾。
+3. **接 `lib/exploration.js`**：ExplorationOverlay 改用 `loadInvestigation`/`applyChoice`/`getEnding`/`buildNarrative`，移除舊 `is_correct`/`fail_text`/25% 誤判。新增訊號格 UI（0–5，隨 delta 動畫；歸 0 → 散去）。成功依 `tier` 顯示 `getEnding` 收尾再進 FragmentReveal。
+4. **接 `lib/signals.js`**：感知頁用 `fetchImpressions(env, { ownedIds })` 取 2-3 個印象。每日輪替 + 條件加權 + 已持有降權。
+5. **Map.jsx 改筆記感知頁**：移除雷達/調頻/`toScreen()`/anomaly-dot。改成感知 → 浮現 2-3 道墨痕印象（各一句 atmosphere）→ 點一道、其餘淡掉 → 〔通靈深入〕/〔重新感知〕。父層傳 `env`（weather.js）、`playerId`（usePlayer）、`onDeepDive(fragment)`（開 ExplorationOverlay 扣 1 靈力）。用法：`<Map env={env} playerId={player.id} onDeepDive={(frag)=>openExploration(frag)} />`（**感知時扣 1 靈力、不足擋住**；onDeepDive 開 overlay 不另扣）
+6. **體力 → 靈力**：全專案文案 + StaminaBar 改名。DB 欄位 `stamina`/`stamina_updated_at` 暫留。**消耗點：感知（掃描）−1、通靈深入免費；靈力不足不能感知。**
+
+### 參數（程式內，playtest 可調）
+- `exploration.js`：`CLARITY_MAX=5`、`START_CLARITY={basic:3,lore:2}`、`HIGH_TIER_MIN=4`
+- `signals.js`：`DAILY_ROSTER_SIZE=6`、`IMPRESSION_COUNT=3`、`COND_FACTOR{match:3,neutral:1,mismatch:0.25}`、`OWNED_FACTOR=0.15`
 
 ## 其他尚未實作
 聯靈筆記本、Meta Horror 事件、Web Push、金流、玩家投稿、鬼怪筆記本 UI 入口、協會等級加權、完整帳號刪除、（未來）全域「今日出沒」featured 輪替（用日期種子即可，不撈光）。
