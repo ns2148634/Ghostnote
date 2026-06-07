@@ -6,9 +6,11 @@ import NotebookSelectModal from '../components/exploration/NotebookSelectModal'
 
 // MapRoute — wraps the Map dial component with env computation and overlay management.
 // Props mirror what AppShell provides: player, notebooks, stamina, consume, addFragment.
+//
+// Map is conditionally rendered only when overlay is closed. This prevents the Map's
+// previous phase from flashing through when the overlay opens or closes.
 export default function MapRoute({ player, notebooks, stamina, consume, addFragment }) {
   const [env, setEnv]         = useState(null)
-  const [scanKey, setScanKey] = useState(0)   // increment to force Map remount → new scan
   const [overlay, setOverlay] = useState(null) // { fragment }
   const [pending, setPending] = useState(null) // { frag, narrative }
 
@@ -44,13 +46,12 @@ export default function MapRoute({ player, notebooks, stamina, consume, addFragm
   // Called by ExplorationOverlay on success (before NotebookSelectModal)
   function handleSuccess(frag, narrative) {
     setPending({ frag, narrative })
-    setOverlay(null)
+    setOverlay(null) // Map remounts fresh (idle) when overlay closes
   }
 
-  // Close overlay (fail / user bailed) → trigger a new scan
+  // Close overlay (fail / user bailed) → Map remounts fresh (idle)
   function handleOverlayClose() {
     setOverlay(null)
-    setScanKey(k => k + 1)
   }
 
   // Called when user picks a notebook in the modal
@@ -58,19 +59,19 @@ export default function MapRoute({ player, notebooks, stamina, consume, addFragm
     if (!pending) return
     await addFragment(notebookId, pending.frag.id, pending.narrative || '')
     setPending(null)
-    setScanKey(k => k + 1) // new scan after picking up a fragment
   }
 
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
-      <Map
-        key={scanKey}
-        env={env}
-        playerId={player?.id}
-        stamina={stamina}
-        consume={consume}
-        onDeepDive={handleDeepDive}
-      />
+      {!overlay && (
+        <Map
+          env={env}
+          playerId={player?.id}
+          stamina={stamina}
+          consume={consume}
+          onDeepDive={handleDeepDive}
+        />
+      )}
 
       {overlay && (
         <ExplorationOverlay
@@ -87,7 +88,7 @@ export default function MapRoute({ player, notebooks, stamina, consume, addFragm
         notebooks={notebooks}
         fragment={pending?.frag}
         onSelect={handleNotebookSelect}
-        onClose={() => { setPending(null); setScanKey(k => k + 1) }}
+        onClose={() => setPending(null)}
       />
     </div>
   )

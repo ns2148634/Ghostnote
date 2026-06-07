@@ -25,13 +25,17 @@ export default function Map({ env, playerId, stamina, consume, onDeepDive }) {
   const sense = useCallback(async () => {
     if (!canSense) return
     setPhase('loading'); setSelected(null); setImpressions([])
-    await consume(1)
-    if (!env) { setPhase('empty'); return }
-    const ownedIds = playerId ? await fetchOwnedFragmentIds(playerId) : []
-    const imps = await fetchImpressions(env, { ownedIds })
-    if (!imps.length) { setPhase('empty'); return }
-    setImpressions(imps)
-    setPhase('sensing')
+    try {
+      await consume(1)
+      if (!env) { setPhase('empty'); return }
+      const ownedIds = playerId ? await fetchOwnedFragmentIds(playerId) : []
+      const imps = await fetchImpressions(env, { ownedIds })
+      if (!imps.length) { setPhase('empty'); return }
+      setImpressions(imps)
+      setPhase('sensing')
+    } catch {
+      setPhase('empty')
+    }
   }, [env, playerId, canSense, consume])
 
   const choose = (i) => { setSelected(i); setPhase('selected') }
