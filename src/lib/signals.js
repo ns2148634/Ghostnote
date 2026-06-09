@@ -21,6 +21,8 @@ const COND_FACTOR = {
   mismatch: 0.25,  // 條件不吻合：很弱但非零
 }
 const OWNED_FACTOR = 0.15  // 已持有碎片大幅降權（設 0 則完全排除）
+// lore 出現機率壓低，讓它真正稀少；basic-rare 次之
+const RARITY_WEIGHT = { common: 1, rare: 0.4, lore: 0.15 }
 
 // ── 本地日期種子 ─────────────────────────────────────────
 function localDateKey(date = new Date()) {
@@ -59,7 +61,12 @@ function condFactor(cond, envValue) {
   return cond === envValue ? COND_FACTOR.match : COND_FACTOR.mismatch
 }
 function fragmentWeight(frag, env) {
+  // lore → 0.15；basic-rare → 0.4；basic-common → 1
+  const rarityW = frag.layer === 'lore'
+    ? RARITY_WEIGHT.lore
+    : RARITY_WEIGHT[frag.rarity] ?? 1
   return (
+    rarityW *
     condFactor(frag.time_condition, env.time) *
     condFactor(frag.weather_condition, env.weather) *
     condFactor(frag.date_condition, env.date)

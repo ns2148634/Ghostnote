@@ -43,8 +43,14 @@ npm run dev
 - `002_seed.sql` — 舊版 seed（已由 004 取代，勿重複執行）
 - `003_scene_pool.sql` — 場景池三個表格 + RLS
 - `004_schema_v2.sql` — Schema v2：清除舊資料、欄位調整、屍鼠完整 seed
-- `005_signal_clarity.sql` — **探查改版**：`scene_options` 由 `is_correct`/`fail_text` 改為 `signal_delta`/`result_text`，並安全轉換現有資料
+- `005_signal_clarity.sql` — **探查改版**：`scene_options` 由 `is_correct`/`fail_text` 改為 `signal_delta`/`result_text`
 - `006_tiered_ending.sql` — **分層結局**：`fragment_scenes` 加 `ending_high`/`ending_low`（只有最後一層填值）
+- `007_encounter.sql` — **遭遇系統 Phase 1**：加 `stories.encounter_archetype`、`scene_options.trust_delta`、`fragment_scenes.climax_type/text/min_trust`（Phase 1 全 NULL，Phase 2 再用）
+
+**Seed 腳本**（`scripts/`）：
+- `scripts/reset.ps1` — 刪除所有故事資料 + 玩家進度（先跑再 seed）
+- `scripts/seed.ps1` — 完整 seed：屍鼠 + 夜班的那個人 + 椅仔姑
+- 執行：`pwsh -File scripts/reset.ps1` → `pwsh -File scripts/seed.ps1`
 
 ## Supabase Auth 設定
 
@@ -119,6 +125,7 @@ current = min(10, stored + floor((now - updated_at) / 8分鐘))
 - **每日輪替**：當天本地日期當種子，決定今天哪幾隻鬼在線上放送（一整天固定，學得會「今天有誰」；隔天換一批）。種子是確定性的，**同一天每個玩家 roster 相同**，不需伺服器。
 - **條件加權（軟）**：玩家當下 time/weather/date（weather.js）對 `story_fragments` 的條件 → 吻合 ×3、NULL ×1、不吻合 ×0.25。不歸零，錯的時機仍可能浮現，收集不卡死。
 - **已持有降權**：玩家已有的碎片 ×0.15，新碎片自然壓過重複的。
+- **稀有度權重**（Phase 1 新增）：`RARITY_WEIGHT = { common:1, rare:0.4, lore:0.15 }`，乘在條件加權之後，讓 lore 真正稀有。
 - **浮現多個**：`pickSignals` 加權抽 2–3 個不重複碎片（盡量來自不同鬼）；`fetchImpressions` 一次回傳 `[{ fragment, atmosphere }]` 給感知頁。
 
 ### 探查邏輯（lib/exploration.js，訊號清晰度模型）
@@ -143,17 +150,19 @@ if (r.outcome === 'fragment') {
 if (r.outcome === 'continue') { i++ }
 ```
 
-**訊號格（清晰度）規則**：
+**訊號格（清晰度）規則（Phase 1）**：
 
 - **範圍** 0–5，clamp（不超過 `CLARITY_MAX`，不低於 0）
 - **起始格數** 依碎片 layer：`START_CLARITY = { basic: 3, lore: 2 }`
 - **層數** 由 `fragment_scenes` 的 `layer_index` 數量決定（normal 3 / rare 4 / legendary 5）
-- **每個選項 signal_delta** 只有 `+1 / 0 / −1 / −2`（刻意不對稱：最好 +1、最差 −2）
-- **每層抽 3 個選項**：判斷層保證「至少 1 個 ≥0（活路）+ 至少 1 個 <0（錯步）」，隨機排序
-- **結算三出口**：`continue` / `faded`（歸 0 散去）/ `fragment`（最後一層 ≥1）。`faded` 優先
+- **每個選項 signal_delta** 只有 `+1 / 0 / −1 / −2`；**`+1` 每場最多出現一次**（`loadInvestigation` 跨層追蹤 `plusOneUsed`）
+- **每層抽 3 個選項**：判斷層保證 **1 個 delta≥0（活路）+ 2 個 delta<0（壞路）**，隨機排序；`plusOneUsed` 後活路池限縮為 delta=0
+- **結算四出口**：`continue` / `faded`（歸 0 散去）/ `missed`（撐到最後但 clarity<`BASIC_GET_MIN` → 沒留下痕跡）/ `fragment`（拿到碎片）
+  - basic：最後一層 `clarity ≥ BASIC_GET_MIN(=2)` → fragment；= 1 → missed；= 0 → faded
+  - lore 無 archetype：最後一層 `clarity ≥ LORE_GET_MIN(=2)` → fragment；否則 missed
 - **每次探查重置**，格數不跨碎片累積
 
-**分層結局**：最後一層成功後依剩餘格數顯示收尾，`tier='high'`（≥`HIGH_TIER_MIN`=4 格，乾淨接通）/ `'low'`（1–3 格，差點斷線）。`applyChoice` 在 `fragment` 時回傳 `tier`；`getEnding(lastLayer, tier)` 取 `ending_high`/`ending_low`。**碎片本身與 tier 無關**，只換收尾氛圍。
+**分層結局**：最後一層成功後依剩餘格數顯示收尾，`tier='high'`（≥`HIGH_TIER_MIN`=4 格）/ `'low'`（2–3 格）。`applyChoice` 在 `fragment` 時回傳 `tier`；`getEnding(lastLayer, tier)` 取 `ending_high`/`ending_low`。**碎片本身與 tier 無關**，只換收尾氛圍。
 
 **is_skippable**：該層所有選項 `signal_delta` 都是 0（純氛圍鋪陳）。basic 第 1 層可 true；**lore 碎片所有層必須 false**。
 
@@ -163,14 +172,16 @@ if (r.outcome === 'continue') { i++ }
 
 ```
 感知（−1 靈力）
-  ※ signals.js：每日輪替 + 環境加權 → fetchImpressions 回傳 2-3 個 { fragment, atmosphere }
+  ※ signals.js：每日輪替 + 環境加權 + RARITY_WEIGHT → fetchImpressions 回傳 2-3 個 { fragment, atmosphere }
+  ※ RARITY_WEIGHT = { common:1, rare:0.4, lore:0.15 } — lore 出現機率大幅壓低
 → 紙上浮現 2-3 道墨痕印象（各一句現場感知）
 → 選一道深入：點一道 → 其餘淡掉 → 〔通靈深入〕（免費）或〔重新感知（−1 靈力）〕
 → 通靈深入 → 進入多層感知（現場遭遇）
-→ 每層：一個場景 + 抽 3 個選項 → 選擇 → result_text + 調整訊號格
-→ 結算：
-   訊號格歸 0 → 存在散去（失敗，空手）
-   撐到最後一層且 ≥1 → getEnding 收尾 → FragmentReveal → NotebookSelectModal → 放入碎片
+→ 每層：一個場景 + 抽 3 個選項（1 活路+2 壞路）→ 選擇 → result_text + 調整訊號格
+→ 結算（Phase 1）：
+   clarity 歸 0 → faded（訊號散去，空手）
+   最後一層 clarity = 1 → missed（接通了卻沒留下痕跡，空手）
+   最後一層 clarity ≥ 2 → getEnding 收尾 → FragmentReveal → NotebookSelectModal → 放入碎片
 ```
 
 **Overlay / 過渡技術細節**：
@@ -285,20 +296,15 @@ creature_pages(id, player_id, story_id, unlocked_layer, obtained_at)
 > ```
 
 ### 已知鬼怪 image_slug
-屍鼠 shushi｜廁所花子 hanako｜新娘電梯 elevator_bride｜隔壁的鄰居 neighbor｜三樓的轉學生 transfer_student｜夜班的那個人 night_shift｜最後一班的乘客 last_passenger｜三點十七分的同事 317_coworker｜對面的那個人 metro_stranger
-
-## 本次改版待實作（交給 Code，依序）
-
-1. **跑 `005_signal_clarity.sql`**：改 scene_options 欄位 + 轉換資料。跑完補寫正確/skippable 選項的 `result_text`（目前空字串）。
-2. **跑 `006_tiered_ending.sql`**：fragment_scenes 加 `ending_high`/`ending_low`。為現有鬼怪最後一層補兩段收尾。
-3. **接 `lib/exploration.js`**：ExplorationOverlay 改用 `loadInvestigation`/`applyChoice`/`getEnding`/`buildNarrative`，移除舊 `is_correct`/`fail_text`/25% 誤判。新增訊號格 UI（0–5，隨 delta 動畫；歸 0 → 散去）。成功依 `tier` 顯示 `getEnding` 收尾再進 FragmentReveal。
-4. **接 `lib/signals.js`**：感知頁用 `fetchImpressions(env, { ownedIds })` 取 2-3 個印象。每日輪替 + 條件加權 + 已持有降權。
-5. **Map.jsx 改筆記感知頁**：移除雷達/調頻/`toScreen()`/anomaly-dot。改成感知 → 浮現 2-3 道墨痕印象（各一句 atmosphere）→ 點一道、其餘淡掉 → 〔通靈深入〕/〔重新感知〕。父層傳 `env`（weather.js）、`playerId`（usePlayer）、`onDeepDive(fragment)`（開 ExplorationOverlay 扣 1 靈力）。用法：`<Map env={env} playerId={player.id} onDeepDive={(frag)=>openExploration(frag)} />`（**感知時扣 1 靈力、不足擋住**；onDeepDive 開 overlay 不另扣）
-6. **體力 → 靈力**：全專案文案 + StaminaBar 改名。DB 欄位 `stamina`/`stamina_updated_at` 暫留。**消耗點：感知（掃描）−1、通靈深入免費；靈力不足不能感知。**
+屍鼠 shushi｜廁所花子 hanako｜新娘電梯 elevator_bride｜隔壁的鄰居 neighbor｜三樓的轉學生 transfer_student｜夜班的那個人 night_shift｜最後一班的乘客 last_passenger｜三點十七分的同事 317_coworker｜對面的那個人 metro_stranger｜**椅仔姑 chair_ghost**
 
 ### 參數（程式內，playtest 可調）
-- `exploration.js`：`CLARITY_MAX=5`、`START_CLARITY={basic:3,lore:2}`、`HIGH_TIER_MIN=4`
-- `signals.js`：`DAILY_ROSTER_SIZE=6`、`IMPRESSION_COUNT=3`、`COND_FACTOR{match:3,neutral:1,mismatch:0.25}`、`OWNED_FACTOR=0.15`
+- `exploration.js`：`CLARITY_MAX=5`、`START_CLARITY={basic:3,lore:2}`、`HIGH_TIER_MIN=4`、`BASIC_GET_MIN=2`、`LORE_GET_MIN=2`
+- `signals.js`：`DAILY_ROSTER_SIZE=6`、`IMPRESSION_COUNT=3`、`COND_FACTOR{match:3,neutral:1,mismatch:0.25}`、`OWNED_FACTOR=0.15`、`RARITY_WEIGHT={common:1,rare:0.4,lore:0.15}`
+
+## Phase 2（尚未實作）
+
+信任軸（trust 0–5）+ climax 手勢（hold_listen / look_away / stay_still / tap_echo）給有 `encounter_archetype` 的 lore。DB Schema 欄位（`stories.encounter_archetype`、`scene_options.trust_delta`、`fragment_scenes.climax_*`）已在 007_encounter.sql 加好，Phase 1 全 NULL。椅仔姑預計用 `correct_response` + `hold_listen`。
 
 ## 其他尚未實作
 聯靈筆記本、Meta Horror 事件、Web Push、金流、玩家投稿、鬼怪筆記本 UI 入口、協會等級加權、完整帳號刪除、（未來）全域「今日出沒」featured 輪替（用日期種子即可，不撈光）。

@@ -110,7 +110,7 @@ function TypewriterText({ text, speed = 35, onDone }) {
 }
 
 // ── Main overlay ────────────────────────────────────────────────────────────
-// phase: 'atmosphere' | 'scene' | 'result' | 'faded' | 'success'
+// phase: 'atmosphere' | 'scene' | 'result' | 'faded' | 'missed' | 'success'
 export default function ExplorationOverlay({
   atmosphereText,
   fragment,
@@ -145,9 +145,11 @@ export default function ExplorationOverlay({
   // Auto-advance from 'result' phase
   useEffect(() => {
     if (phase !== 'result' || !pendingOutcome) return
-    const delay = pendingOutcome === 'faded' ? 2500 : displayText ? 2500 : 400
+    const isFinal = pendingOutcome === 'faded' || pendingOutcome === 'missed'
+    const delay = isFinal ? 2500 : displayText ? 2500 : 400
     const t = setTimeout(() => {
       if      (pendingOutcome === 'faded')    setPhase('faded')
+      else if (pendingOutcome === 'missed')   setPhase('missed')
       else if (pendingOutcome === 'fragment') setPhase('success')
       else { setLayerIdx(i => i + 1); setDone(false); setPhase('scene') }
     }, delay)
@@ -173,7 +175,7 @@ export default function ExplorationOverlay({
   }
 
   function handleChoice(opt) {
-    const r = applyChoice({ clarity, layerIndex: layerIdx, totalLayers: layers.length }, opt)
+    const r = applyChoice({ clarity, layerIndex: layerIdx, totalLayers: layers.length, fragmentLayer: fragment?.layer ?? 'basic' }, opt)
     walkedRef.current = [...walkedRef.current, { sceneText: layers[layerIdx].sceneText, resultText: r.resultText }]
     setClarity(r.clarity)
     setResultText(r.resultText)
@@ -269,6 +271,22 @@ export default function ExplorationOverlay({
                 </p>
               )}
               <p className="font-mono text-dim text-xs tracking-widest fade-in">— 訊號散去 —</p>
+              <button onClick={onClose}
+                className="mt-8 font-mono text-dim text-xs tracking-widest hover:text-muted transition-colors self-start fade-in">
+                離開
+              </button>
+            </>
+          )}
+
+          {/* Missed — reached final layer but clarity too low */}
+          {phase === 'missed' && (
+            <>
+              {resultText && (
+                <p className={`font-mono text-muted ${textCls} whitespace-pre-line break-words fade-in mb-6`}>
+                  {resultText}
+                </p>
+              )}
+              <p className="font-mono text-dim text-xs tracking-widest fade-in">— 接通了，卻沒能留下痕跡 —</p>
               <button onClick={onClose}
                 className="mt-8 font-mono text-dim text-xs tracking-widest hover:text-muted transition-colors self-start fade-in">
                 離開
