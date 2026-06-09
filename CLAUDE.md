@@ -246,7 +246,7 @@ motif_tags TEXT[] DEFAULT '{}', is_user_submitted BOOLEAN DEFAULT false
 
 ### fragment_atmosphere
 ```sql
-id UUID, story_fragment_id UUID, atmosphere_text TEXT  -- 現場感知到的異常，2-3句
+id UUID, story_fragment_id UUID, atmosphere_text TEXT  -- 異常點：現場感知到的異常，很短一句（約10-25字），結尾用…
 ```
 
 ### fragment_scenes（含分層結局欄位）
@@ -292,7 +292,7 @@ creature_pages(id, player_id, story_id, unlocked_layer, obtained_at)
 > )
 > INSERT INTO scene_options (id, scene_id, text, signal_delta, result_text)
 > SELECT gen_random_uuid(), sc.id, v.text, v.signal_delta, v.result_text FROM sc
-> CROSS JOIN (VALUES ('貼當下的選擇',1,'訊號穩住了。'),('突兀的選擇',-2,'訊號散開。')) AS v(text,signal_delta,result_text);
+> CROSS JOIN (VALUES ('貼當下的選擇',1,'它沒有退開，反而更靠近了一點。'),('突兀的選擇',-2,'它在你動作的瞬間退進牆裡。')) AS v(text,signal_delta,result_text);
 > ```
 
 ### 已知鬼怪 image_slug

@@ -79,6 +79,7 @@ Code 照此建引擎；內容生成照此寫選項與門檻。建立在現有「
 | `look_away` | 別直視型 | 牠現身,往別處點/滑開視線 | 移開=成功 / 直視太久=失敗 |
 | `stay_still` | 靜止節奏型 | 牠靠近時別動(一段時間不觸碰螢幕) | 不動=成功 / 亂動=失敗 |
 | `tap_echo` | 正確回應型(替代) | 牠敲一段節奏,你照著敲回去 | 對=成功 / 錯=失敗 |
+| `spatial_react` | 別被注意 / 靜止 / 探索類 | 聽到聲音,選一個方位動作(前探 / 躲 / 等 / 退) | 選對當下情境=守住 / 選錯=掉(見 §11) |
 
 先實作 `hold_listen`（椅仔姑用),其餘原型沿用同一套「成功=high / 失敗=low」介面,之後再加。
 
@@ -137,6 +138,11 @@ ALTER TABLE scene_options ADD COLUMN IF NOT EXISTS trust_delta SMALLINT DEFAULT 
 ALTER TABLE fragment_scenes ADD COLUMN IF NOT EXISTS climax_type TEXT;        -- 如 'hold_listen'
 ALTER TABLE fragment_scenes ADD COLUMN IF NOT EXISTS climax_text TEXT;        -- 手勢中跑的字
 ALTER TABLE fragment_scenes ADD COLUMN IF NOT EXISTS climax_min_trust SMALLINT; -- 通常 = TRUST_GATE
+
+-- 空間選項模式（見 §11）
+ALTER TABLE fragment_scenes ADD COLUMN IF NOT EXISTS scene_mode TEXT DEFAULT 'text'; -- 'text' | 'spatial'
+ALTER TABLE scene_options  ADD COLUMN IF NOT EXISTS position   TEXT;                 -- 'forward'|'hide'|'wait'|'look'|'back'（spatial 場景用）
+-- ALTER TABLE fragment_scenes ADD COLUMN IF NOT EXISTS sound_slug TEXT;             -- （選用，未來）場景音效
 ```
 
 ---
@@ -193,3 +199,59 @@ onChoice(option):
 
 - **Phase 1（先上、便宜驗證）**:做「取得閘 + 選項調硬 + 出現機率」——即 §3 的 basic 門檻、§2 的 1 活路+2 壞與回血稀有、§5 的稀有度權重。**先不做信任/手勢**,lore 暫走「無原型退化」(單軸 clarity ≥ 2)。這就能解決「太容易、隨便都拿得到」。
 - **Phase 2（驗證後再投資）**:加 `trust` 第二軸 + `climax` 手勢到 archetype 的 lore(椅仔姑先行)。Schema 欄位可在 Phase 1 一起加好（NULL 不影響),邏輯 Phase 2 再開。
+
+---
+
+## 11. 空間選項模式（spatial_react）
+
+把「讀三句話再選」換成「聽到/感覺到一個提示 → 選一個方位動作」。**選項仍是 `scene_options`、照樣帶 `signal_delta` / `trust_delta`**,只是換呈現:方位 + 圖示 + 短標籤 + 一句感官提示。目的:少讀、有身體感、更臨場。可當一般判斷層的呈現,也可當 climax(`spatial_react`)。
+
+**啟用**:`fragment_scenes.scene_mode = 'spatial'`;該層每個選項填 `position`。
+
+**方位語彙(固定語意、UI 固定擺位 + 圖示,玩家秒懂、不會亂):**
+
+| position | 擺位 | 意思 |
+|----------|------|------|
+| `forward` | 上/中 ↑ | 往前探查、接近 |
+| `hide` | 右 🛡 | 躲起來、避開視線 |
+| `wait` | 下 ⏸ | 原地等待、按兵不動 |
+| `look` | 左 👁 | 回頭看、直視 |
+| `back` | 下 ↓ | 退開、撤離 |
+
+一個 spatial 層放 3 個方位選項,抽法仍照 §2(1 個 `signal≥0` + 2 個 `<0`)。
+
+**「哪個方位對」由當下情境決定,不是固定答案。** 同樣是「躲」,在「它朝你來」時對、在「它要你跟上」時可能錯。玩家讀那句感官提示去判斷——這就是技巧。所以同一個 position 在不同場景可以是好或壞,別讓「躲」永遠安全。
+
+**鐵則:**
+- **感官提示一定要有文字**(寫在 `atmosphere_text`),例:「後場傳來紙箱被拖行的聲音,朝這邊來了…」。**音效只是加分**(`sound_slug` 選用);靜音/聽障玩家靠文字也要能玩。
+- **跟文字模式交錯用**,別整場都空間選項(會變成另一種單調)。緊張/移動的節拍用 spatial,對話/回應的節拍(正確回應型)用文字。
+- 一層最多 3 個方位,別塞滿手機螢幕。
+
+**範例:夜班的那個人(basic、別被注意風格、spatial 層)**
+
+聲音朝你來 → 躲起來(不被看見)才對;在原地僵著會被它走到;往前等於撞上它。
+
+```sql
+WITH sc AS (
+  INSERT INTO fragment_scenes
+    (id, story_fragment_id, layer_index, atmosphere_text, is_skippable, scene_mode, ending_high, ending_low)
+  VALUES (gen_random_uuid(), 'night-shift-frag-uuid', 2,
+    '後場深處傳來紙箱被拖行的聲音,一下,又一下,朝貨架這邊來了…',
+    false, 'spatial', NULL, NULL)
+  RETURNING id
+)
+INSERT INTO scene_options (id, scene_id, text, position, signal_delta, trust_delta, result_text)
+SELECT gen_random_uuid(), sc.id, v.text, v.position, v.signal_delta, 0, v.result_text FROM sc
+CROSS JOIN (VALUES
+  ('躲進貨架之間',     'hide',    0,  '你貼進貨架的陰影,那聲音從你面前慢慢經過,沒有停。'),
+  ('在原地屏息不動',   'wait',   -1,  '你僵在走道中央,拖行聲在你背後停了下來。'),
+  ('往聲音的方向探過去','forward', -2, '你才轉過貨架,正對上那個彎著腰、不該在這裡的身影。')
+) AS v(text, position, signal_delta, result_text);
+```
+
+> 此層 basic、單軸,故 `trust_delta` 全 0、`scene_mode='spatial'`。其餘鬼/層可自由混用 `text` 與 `spatial`;同一隻鬼穿插兩種呈現最不膩。
+
+## 12. 實作分期補充（空間模式放哪期）
+
+- 空間模式的 schema(`scene_mode`、`position`)在 **Phase 1 一起加好**(NULL/'text' 不影響)。
+- 呈現與判定很輕(選項照舊算 delta,只是 UI 換擺位),可在 **Phase 1 後段或 Phase 2 初** 做,當作「降低閱讀疲勞」的第一個甜頭——比信任/手勢更早、更便宜見效。
