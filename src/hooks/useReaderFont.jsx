@@ -12,7 +12,7 @@ export function useReaderFont() {
   const [idx, setIdx] = useState(() => {
     const saved = localStorage.getItem(FONT_KEY)
     const n = parseInt(saved)
-    return isNaN(n) ? 1 : Math.max(0, Math.min(FONT_SIZES.length - 1, n))
+    return isNaN(n) ? 2 : Math.max(0, Math.min(FONT_SIZES.length - 1, n))
   })
   function change(delta) {
     setIdx(prev => {

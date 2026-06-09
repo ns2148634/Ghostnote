@@ -2,12 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Typography scale ───────────────────────── */
+:root {
+  --pn-font-base: 18px;      /* single source of truth for font scale */
+}
+
 /* ── Reset ─────────────────────────────────── */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html {
   height: 100%;
   background: #000;          /* desktop gutter — pure black */
+  font-size: var(--pn-font-base); /* scales all Tailwind rem sizes: xs≈13.5px sm≈16px base=18px lg≈20px */
 }
 
 body {
@@ -15,7 +21,7 @@ body {
   background: #000;
   color: #e8e0d5;
   font-family: 'Courier New', Courier, monospace;
-  font-size: 15px;           /* base — bigger than default 12px used before */
+  font-size: var(--pn-font-base);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }

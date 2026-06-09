@@ -65,7 +65,7 @@ src/
 ├── components/
 │   ├── exploration/   探查流程 UI（ExplorationOverlay、NotebookSelectModal、FragmentReveal）
 │   ├── layout/        TopBar、BottomNav
-│   └── ui/            Modal、StaminaBar（靈力條，DB 欄位 stamina 暫留）
+│   └── ui/            Modal、StaminaBar（靈力條，DB 欄位 stamina 暫留）、CRTOverlay（vignette + scanlines 6s pulse）
 ├── hooks/
 │   ├── usePlayer.js   玩家資料（fetch/create on login，含 isNew 旗標）
 │   ├── useStamina.js  靈力計算（時間差，無後端排程）
@@ -73,7 +73,8 @@ src/
 ├── lib/
 │   ├── supabase.js     Supabase client
 │   ├── weather.js      Open-Meteo + 時辰/節日判斷（感知印象的出沒條件來源）
-│   ├── signals.js      訊號可用性：每日輪替 + 條件加權，決定此刻感知能浮現哪幾個印象
+│   ├── signals.js      訊號可用性：priority roster + date-seed 補位 + 條件加權
+│   ├── typeLine.js     不規則打字效果：typeLine(el,…) DOM 版 / typeLineCallback(text,onChar,…) React 版
 │   └── exploration.js  探查邏輯：載入層、抽選項、累加訊號格、結算、分層結局
 └── pages/
     ├── Auth.jsx        登入（Google OAuth + Email OTP 兩步驟）
@@ -87,7 +88,7 @@ src/
 ## UI 設計原則
 
 - **手機優先**：`#root` `max-width: 600px` 居中，`width: 100%` 確保手機全寬；桌面/平板兩側填 `#000` 純黑
-- **基礎字體**：`body font-size: 15px`；標籤用 `text-xs`(12px)，內文用 `text-sm`(14px)
+- **基礎字體**：`--pn-font-base: 18px`（CSS 變數，同時設定 `html`/`body font-size`）；`html font-size: 18px` 使 Tailwind rem 同步縮放（`text-xs`≈13.5px、`text-sm`≈16px、`text-base`=18px）；ExplorationOverlay 預設字級 idx=2（`text-base`=18px）
 - **Safe area**：`#root` 有 `padding-top: env(safe-area-inset-top)`；BottomNav 有 `padding-bottom: env(safe-area-inset-bottom)`
 - **動畫原則**：極少、極慢；禁止彈跳；只用 fadeIn / pulse / typewriter（感知頁墨痕用 blur→clear 的滲出）
 - **靈異主題色**：深黑底 `#080604`、暖金 `#c9b99a`、CRT scanlines、灰白冷光
@@ -110,8 +111,8 @@ current = min(10, stored + floor((now - updated_at) / 8分鐘))
 
 - **畫面**：翻開的筆記頁（深黑 `#080604` + 紙面漸層 + 暖金）。頂端顯示環境（時辰 + 天氣 + 節日）。
 - **待機**：頁面中央一顆「感知」按鈕（呼吸光暈）。進頁面不自動感知、不扣靈力。
-- **感知（−1 靈力）**：按下中央按鈕才觸發——扣 1 靈力後墨色滲開，紙上浮現 **2–3 道墨痕印象**，各一句 `fragment_atmosphere`（現場感知到的異常，如「暗巷裡似乎有人影」）。墨痕用 blur→clear 滲出、交錯延遲出現。
-- **選一道深入**：點一道墨痕 → **其餘墨痕淡掉（散回紙裡）** → 顯示〔通靈深入〕（免費）/〔重新感知（＝再感知一次，−1 靈力）〕。
+- **感知（−1 靈力）**：按下中央按鈕才觸發——扣 1 靈力後，先等 ~520ms 純黑死寂，再逐行以不規則打字（70–160ms/字）浮現 **2–3 道墨痕印象**；各行打完後再等 420–760ms 再起下一行。CRT overlay（vignette + scanlines 6s pulse）常駐。未選中時文字冷灰白 `#c8c0b8`；金色 `#c9b99a` 只打在焦點元素。
+- **選一道深入**：點一道墨痕 → **其餘墨痕慢慢淡去（opacity→0.1，1.4s）** → 顯示〔通靈深入〕（免費）/〔重新感知（＝再感知一次，−1 靈力）〕。
 - **一次一個**：深入或放掉後 → 再感知，浮現新的一批。
 - **空頁**：環境沒有可浮現的印象時，顯示「今晚很安靜，紙上沒有浮現任何痕跡」。不懲罰，換時機再來。
 - **沒有錯覺**：浮現的都是真的碎片；選擇的張力來自機會成本（挑一個、放掉其餘），不是「白工」。
@@ -124,8 +125,9 @@ current = min(10, stored + floor((now - updated_at) / 8分鐘))
 
 - **每日輪替**：當天本地日期當種子，決定今天哪幾隻鬼在線上放送（一整天固定，學得會「今天有誰」；隔天換一批）。種子是確定性的，**同一天每個玩家 roster 相同**，不需伺服器。
 - **條件加權（軟）**：玩家當下 time/weather/date（weather.js）對 `story_fragments` 的條件 → 吻合 ×3、NULL ×1、不吻合 ×0.25。不歸零，錯的時機仍可能浮現，收集不卡死。
-- **已持有降權**：玩家已有的碎片 ×0.15，新碎片自然壓過重複的。
+- **已封存降權**：已封存（sealed）的故事下所有碎片 ×`SEALED_FACTOR`(0.15)；進行中（含近完成）不降權（取代舊 `OWNED_FACTOR`）。
 - **稀有度權重**（Phase 1 新增）：`RARITY_WEIGHT = { common:1, rare:0.4, lore:0.15 }`，乘在條件加權之後，讓 lore 真正稀有。
+- **Priority roster**：差 ≤ `NEAR_COMPLETE_REMAINING`(2) 片基礎碎片且未封存的故事 → 進入 NC 集，最多 `PRIORITY_SLOTS`(2) 格保證進 roster；其餘格由 date-seed 補位（全員同日相同）。Priority 部分依玩家各自進度而異（per-player，client-local）。
 - **浮現多個**：`pickSignals` 加權抽 2–3 個不重複碎片（盡量來自不同鬼）；`fetchImpressions` 一次回傳 `[{ fragment, atmosphere }]` 給感知頁。
 
 ### 探查邏輯（lib/exploration.js，訊號清晰度模型）
@@ -300,7 +302,7 @@ creature_pages(id, player_id, story_id, unlocked_layer, obtained_at)
 
 ### 參數（程式內，playtest 可調）
 - `exploration.js`：`CLARITY_MAX=5`、`START_CLARITY={basic:3,lore:2}`、`HIGH_TIER_MIN=4`、`BASIC_GET_MIN=2`、`LORE_GET_MIN=2`
-- `signals.js`：`DAILY_ROSTER_SIZE=6`、`IMPRESSION_COUNT=3`、`COND_FACTOR{match:3,neutral:1,mismatch:0.25}`、`OWNED_FACTOR=0.15`、`RARITY_WEIGHT={common:1,rare:0.4,lore:0.15}`
+- `signals.js`：`DAILY_ROSTER_SIZE=6`、`IMPRESSION_COUNT=3`、`COND_FACTOR{match:3,neutral:1,mismatch:0.25}`、`SEALED_FACTOR=0.15`（已封存才降權，取代舊 `OWNED_FACTOR`）、`RARITY_WEIGHT={common:1,rare:0.4,lore:0.15}`、`PRIORITY_SLOTS=2`、`NEAR_COMPLETE_REMAINING=2`、`NEAR_COMPLETE_BOOST=1.0`（先不開）
 
 ## Phase 2（尚未實作）
 
