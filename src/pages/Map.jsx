@@ -1,12 +1,12 @@
 // Map.jsx — 感知主頁（v4，priority roster + 不規則打字氛圍 + CRT overlay）
 // 進頁面不自動感知、不扣靈力。玩家按中央的「感知」按鈕才扣 1 靈力、浮現 2-3 道墨痕印象。
-// 選一道深入、其餘慢慢淡去（1.4s）；通靈深入免費。
+// 選一道深入、其餘慢慢淡去（1.4s）；深入探查免費。感知必出印象，無「今天無異常」空頁。
 import { useState, useEffect, useRef } from 'react'
 import { fetchImpressions, fetchOwnedFragmentIds, fetchSealedStoryIds } from '../lib/signals'
 import { typeLineCallback } from '../lib/typeLine'
 import CRTOverlay from '../components/ui/CRTOverlay'
 
-const GOLD     = '#c9b99a'   // 焦點元素（感知鈕、選中印象、通靈深入）
+const GOLD     = '#c9b99a'   // 焦點元素（感知鈕、選中印象、深入探查）
 const COLD     = '#c8c0b8'   // 非焦點文字
 const COLD_DIM = '#5f5a51'   // 次要提示（狀態列、hint）
 const INK      = '#0c0a08'
@@ -65,11 +65,11 @@ export default function Map({ env, playerId, stamina, onSense, onDeepDive }) {
     const ok = onSense ? onSense() : true
     if (ok === false) { setNote('靈力不足，無法感知。'); return }
     setPhase('loading'); setSelected(null); setImpressions([]); setDisplayedTexts([])
-    if (!env) { setPhase('empty'); return }
+    const effectiveEnv   = env ?? { time: null, weather: null, date: null }
     const ownedIds       = playerId ? await fetchOwnedFragmentIds(playerId) : []
     const sealedStoryIds = playerId ? await fetchSealedStoryIds(playerId)   : []
-    const imps = await fetchImpressions(env, { ownedIds, sealedStoryIds })
-    if (!imps.length) { setPhase('empty'); return }
+    const imps = await fetchImpressions(effectiveEnv, { ownedIds, sealedStoryIds })
+    if (!imps.length) { setPhase('idle'); return }
     setImpressions(imps)
     setPhase('sensing')
   }
@@ -126,15 +126,6 @@ export default function Map({ env, playerId, stamina, onSense, onDeepDive }) {
         </div>
       )}
 
-      {/* ── 空頁 ── */}
-      {phase === 'empty' && (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: COLD_DIM, lineHeight: 2.2, textAlign: 'center' }}>
-          <div style={{ fontSize: 17 }}>今晚很安靜。</div>
-          <div style={{ fontSize: 13 }}>紙上沒有浮現任何痕跡。</div>
-          <button onClick={reset} style={btn}>退出</button>
-        </div>
-      )}
-
       {/* ── 感知中 / 已選 ── */}
       {((phase === 'sensing' && revealReady) || phase === 'selected') && (
         <div style={{ marginTop: 24 }}>
@@ -177,7 +168,7 @@ export default function Map({ env, playerId, stamina, onSense, onDeepDive }) {
                 onClick={() => onDeepDive?.(impressions[selected].fragment)}
                 style={{ ...btn, flex: 1, borderColor: GOLD + '99', color: GOLD }}
               >
-                通靈深入
+                深入探查
               </button>
               <button
                 onClick={doSense}

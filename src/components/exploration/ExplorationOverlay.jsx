@@ -225,7 +225,7 @@ export default function ExplorationOverlay({
                     className="font-mono text-accent text-xs tracking-widest hover:text-ink transition-colors
                                underline underline-offset-4 decoration-dim disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    {busy ? '...' : '通靈深入'}
+                    {busy ? '...' : '深入探查'}
                   </button>
                 </div>
               )}
@@ -270,7 +270,7 @@ export default function ExplorationOverlay({
                   {resultText}
                 </p>
               )}
-              <p className="font-mono text-dim text-xs tracking-widest fade-in">— 訊號散去 —</p>
+              <p className="font-mono text-dim text-xs tracking-widest fade-in">— 那道存在散去了 —</p>
               <button onClick={onClose}
                 className="mt-8 font-mono text-dim text-xs tracking-widest hover:text-muted transition-colors self-start fade-in">
                 離開
@@ -286,7 +286,7 @@ export default function ExplorationOverlay({
                   {resultText}
                 </p>
               )}
-              <p className="font-mono text-dim text-xs tracking-widest fade-in">— 接通了，卻沒能留下痕跡 —</p>
+              <p className="font-mono text-dim text-xs tracking-widest fade-in">— 確實存在過，但沒能留下痕跡 —</p>
               <button onClick={onClose}
                 className="mt-8 font-mono text-dim text-xs tracking-widest hover:text-muted transition-colors self-start fade-in">
                 離開

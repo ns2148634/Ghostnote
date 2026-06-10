@@ -38,7 +38,7 @@ export default function MapRoute({ player, notebooks, stamina, consume, addFragm
     load()
   }, [])
 
-  // Called by Map when user clicks 通靈深入（免費，靈力已在感知時扣過）
+  // Called by Map when user clicks 深入探查（免費，靈力已在感知時扣過）
   function handleDeepDive(fragment) {
     setOverlay({ fragment })
   }
